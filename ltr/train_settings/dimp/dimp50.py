@@ -73,6 +73,7 @@ def run(settings):
     # Train sampler and loader
     dataset_train = sampler.DiMPSampler([lasot_train, got10k_train, trackingnet_train], [0.25, 1, 1],
                                         samples_per_epoch=26000, max_gap=30, num_test_frames=3, num_train_frames=3,
+                                        frame_sample_mode='memory', long_num_train_frames=3, short_num_train_frames=3,
                                         processing=data_processing_train)
 
     loader_train = LTRLoader('train', dataset_train, training=True, batch_size=settings.batch_size, num_workers=settings.num_workers,
@@ -80,7 +81,8 @@ def run(settings):
 
     # Validation samplers and loaders
     dataset_val = sampler.DiMPSampler([got10k_val], [1], samples_per_epoch=5000, max_gap=30,
-                                      num_test_frames=3, num_train_frames=3,
+                                      num_test_frames=3, num_train_frames=3, frame_sample_mode='memory',
+                                      long_num_train_frames=3, short_num_train_frames=3,
                                       processing=data_processing_val)
 
     loader_val = LTRLoader('val', dataset_val, training=False, batch_size=settings.batch_size, num_workers=settings.num_workers,
