@@ -1,6 +1,6 @@
 import torch.nn as nn
 import torch.optim as optim
-from ltr.dataset import Lasot, Got10k, TrackingNet, MSCOCOSeq
+from ltr.dataset import Lasot, Got10k, TrackingNet
 from ltr.data import processing, sampler, LTRLoader
 from ltr.models.tracking import dimpnet
 import ltr.models.loss as ltr_losses
@@ -32,11 +32,10 @@ def run(settings):
     lasot_train = Lasot(settings.env.lasot_dir, split='train')
     got10k_train = Got10k(settings.env.got10k_dir, split='vottrain')
     trackingnet_train = TrackingNet(settings.env.trackingnet_dir, set_ids=list(range(4)))
-    coco_train = MSCOCOSeq(settings.env.coco_dir)
+    # coco_train = MSCOCOSeq(settings.env.coco_dir)
 
     # Validation datasets
     got10k_val = Got10k(settings.env.got10k_dir, split='votval')
-
 
     # Data transform
     transform_joint = tfm.Transform(tfm.ToGrayscale(probability=0.05))
@@ -72,7 +71,7 @@ def run(settings):
                                                     joint_transform=transform_joint)
 
     # Train sampler and loader
-    dataset_train = sampler.DiMPSampler([lasot_train, got10k_train, trackingnet_train, coco_train], [0.25,1,1,1],
+    dataset_train = sampler.DiMPSampler([lasot_train, got10k_train, trackingnet_train], [0.25, 1, 1],
                                         samples_per_epoch=26000, max_gap=30, num_test_frames=3, num_train_frames=3,
                                         processing=data_processing_train)
 

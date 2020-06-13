@@ -58,7 +58,7 @@ class LTRTrainer(BaseTrainer):
             data['settings'] = self.settings
 
             # forward pass
-            loss, stats = self.actor(data)
+            loss, stats = self.actor(data, self.epoch)
 
             # backward pass and update weights
             if loader.training:

@@ -4,13 +4,14 @@ import torch
 
 class DiMPActor(BaseActor):
     """Actor for training the DiMP network."""
+
     def __init__(self, net, objective, loss_weight=None):
         super().__init__(net, objective)
         if loss_weight is None:
             loss_weight = {'iou': 1.0, 'test_clf': 1.0}
         self.loss_weight = loss_weight
 
-    def __call__(self, data):
+    def __call__(self, data, epoch):
         """
         args:
             data - The input data, should contain the fields 'train_images', 'test_images', 'train_anno',
@@ -21,10 +22,13 @@ class DiMPActor(BaseActor):
             stats  -  dict containing detailed losses
         """
         # Run network
-        target_scores, iou_pred = self.net(train_imgs=data['train_images'],
-                                           test_imgs=data['test_images'],
-                                           train_bb=data['train_anno'],
-                                           test_proposals=data['test_proposals'])
+        target_scores, iou_pred, tl, ts, pred, sigmas, lengths, new_video = self.net(train_imgs=data['train_images'],
+                                                                                     test_imgs=data['test_images'],
+                                                                                     train_bb=data['train_anno'],
+                                                                                     test_proposals=data['test_proposals'],
+                                                                                     #  test_bb=data['test_anno'],
+                                                                                     #  gt=data['test_label'],
+                                                                                     epoch=epoch)
 
         # Classification losses for the different optimization iterations
         clf_losses_test = [self.objective['test_clf'](s, data['test_label'], data['test_anno']) for s in target_scores]
@@ -72,6 +76,7 @@ class DiMPActor(BaseActor):
 
 class KLDiMPActor(BaseActor):
     """Actor for training the DiMP network."""
+
     def __init__(self, net, objective, loss_weight=None):
         super().__init__(net, objective)
         if loss_weight is None:
@@ -134,7 +139,7 @@ class KLDiMPActor(BaseActor):
         loss_clf_ce_iter = 0
         if 'clf_ce' in self.loss_weight.keys():
             # Classification losses for the different optimization iterations
-            clf_ce_losses = [self.objective['clf_ce'](s, data['test_label_density'], grid_dim=(-2,-1)) for s in target_scores]
+            clf_ce_losses = [self.objective['clf_ce'](s, data['test_label_density'], grid_dim=(-2, -1)) for s in target_scores]
 
             # Loss of the final filter
             clf_ce = clf_ce_losses[-1]
@@ -154,7 +159,7 @@ class KLDiMPActor(BaseActor):
 
         # Total loss
         loss = loss_bb_ce + loss_clf_ce + loss_clf_ce_init + loss_clf_ce_iter + \
-                            loss_target_classifier + loss_test_init_clf + loss_test_iter_clf
+            loss_target_classifier + loss_test_init_clf + loss_test_iter_clf
 
         if torch.isinf(loss) or torch.isnan(loss):
             raise Exception('ERROR: Loss was nan or inf!!!')

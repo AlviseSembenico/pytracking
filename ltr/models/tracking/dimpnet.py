@@ -31,8 +31,7 @@ class DiMPnet(nn.Module):
         self.bb_regressor_layer = bb_regressor_layer
         self.output_layers = sorted(list(set(self.classification_layer + self.bb_regressor_layer)))
 
-
-    def forward(self, train_imgs, test_imgs, train_bb, test_proposals, *args, **kwargs):
+    def forward(self, train_imgs, test_imgs, train_bb, test_proposals, epoch, *args, **kwargs):
         """Runs the DiMP network the way it is applied during training.
         The forward function is ONLY used for training. Call the individual functions during tracking.
         args:
@@ -93,7 +92,6 @@ class DiMPnet(nn.Module):
         all_feat = self.feature_extractor(im, backbone_layers)
         all_feat['classification'] = self.extract_classification_feat(all_feat)
         return OrderedDict({l: all_feat[l] for l in layers})
-
 
 
 @model_constructor
@@ -189,7 +187,7 @@ def dimpnet50(filter_size=1, optim_iter=5, optim_init_step=1.0, optim_init_reg=0
                                          filter_optimizer=optimizer, feature_extractor=clf_feature_extractor)
 
     # Bounding box regressor
-    bb_regressor = bbmodels.AtomIoUNet(input_dim=(4*128,4*256), pred_input_dim=iou_input_dim, pred_inter_dim=iou_inter_dim)
+    bb_regressor = bbmodels.AtomIoUNet(input_dim=(4*128, 4*256), pred_input_dim=iou_input_dim, pred_inter_dim=iou_inter_dim)
 
     # DiMP network
     net = DiMPnet(feature_extractor=backbone_net, classifier=classifier, bb_regressor=bb_regressor,
@@ -197,13 +195,12 @@ def dimpnet50(filter_size=1, optim_iter=5, optim_init_step=1.0, optim_init_reg=0
     return net
 
 
-
 @model_constructor
 def L2dimpnet18(filter_size=1, optim_iter=5, optim_init_step=1.0, optim_init_reg=0.01,
-              classification_layer='layer3', feat_stride=16, backbone_pretrained=True, clf_feat_blocks=1,
-              clf_feat_norm=True, init_filter_norm=False, final_conv=True,
-              out_feature_dim=256, iou_input_dim=(256, 256), iou_inter_dim=(256, 256),
-              detach_length=float('Inf'), hinge_threshold=-999, gauss_sigma=1.0, alpha_eps=0):
+                classification_layer='layer3', feat_stride=16, backbone_pretrained=True, clf_feat_blocks=1,
+                clf_feat_norm=True, init_filter_norm=False, final_conv=True,
+                out_feature_dim=256, iou_input_dim=(256, 256), iou_inter_dim=(256, 256),
+                detach_length=float('Inf'), hinge_threshold=-999, gauss_sigma=1.0, alpha_eps=0):
     # Backbone
     backbone_net = backbones.resnet18(pretrained=backbone_pretrained)
 
@@ -221,9 +218,9 @@ def L2dimpnet18(filter_size=1, optim_iter=5, optim_init_step=1.0, optim_init_reg
 
     # Optimizer for the DiMP classifier
     optimizer = clf_optimizer.DiMPL2SteepestDescentGN(num_iter=optim_iter, feat_stride=feat_stride,
-                                                    init_step_length=optim_init_step, hinge_threshold=hinge_threshold,
-                                                    init_filter_reg=optim_init_reg, gauss_sigma=gauss_sigma,
-                                                    detach_length=detach_length, alpha_eps=alpha_eps)
+                                                      init_step_length=optim_init_step, hinge_threshold=hinge_threshold,
+                                                      init_filter_reg=optim_init_reg, gauss_sigma=gauss_sigma,
+                                                      detach_length=detach_length, alpha_eps=alpha_eps)
 
     # The classifier module
     classifier = target_clf.LinearFilter(filter_size=filter_size, filter_initializer=initializer,
@@ -334,7 +331,7 @@ def klcedimpnet50(filter_size=1, optim_iter=5, optim_init_step=1.0, optim_init_r
                                          filter_optimizer=optimizer, feature_extractor=clf_feature_extractor)
 
     # Bounding box regressor
-    bb_regressor = bbmodels.AtomIoUNet(input_dim=(4*128,4*256), pred_input_dim=iou_input_dim, pred_inter_dim=iou_inter_dim)
+    bb_regressor = bbmodels.AtomIoUNet(input_dim=(4*128, 4*256), pred_input_dim=iou_input_dim, pred_inter_dim=iou_inter_dim)
 
     # DiMP network
     net = DiMPnet(feature_extractor=backbone_net, classifier=classifier, bb_regressor=bb_regressor,
