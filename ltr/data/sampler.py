@@ -107,7 +107,7 @@ class TrackingSampler(torch.utils.data.Dataset):
             visible = seq_info_dict['visible']
 
             enough_visible_frames = visible.type(torch.int64).sum().item() > 2 * (
-                    self.num_test_frames + self.num_train_frames) and len(visible) >= 20
+                self.num_test_frames + self.num_train_frames) and len(visible) >= 20
 
             enough_visible_frames = enough_visible_frames or not is_video_dataset
 
@@ -122,9 +122,9 @@ class TrackingSampler(torch.utils.data.Dataset):
                     base_frame_id = self._sample_visible_ids(visible, num_ids=1)
                     extra_train_frame_ids = self._sample_visible_ids(visible, num_ids=self.num_train_frames - 1,
                                                                      min_id=base_frame_id[
-                                                                                0] - self.max_gap - gap_increase,
+                                                                         0] - self.max_gap - gap_increase,
                                                                      max_id=base_frame_id[
-                                                                                0] + self.max_gap + gap_increase)
+                                                                         0] + self.max_gap + gap_increase)
                     if extra_train_frame_ids is None:
                         gap_increase += 5
                         continue
@@ -147,6 +147,25 @@ class TrackingSampler(torch.utils.data.Dataset):
                         continue
                     train_frame_ids = base_frame_id + prev_frame_ids
                     test_frame_ids = self._sample_visible_ids(visible, min_id=train_frame_ids[0] + 1,
+                                                              max_id=train_frame_ids[0] + self.max_gap + gap_increase,
+                                                              num_ids=self.num_test_frames)
+                    # Increase gap until a frame is found
+                    gap_increase += 5
+
+            elif self.frame_sample_mode == 'memory':
+                # Sample test and train frames in a causal manner, i.e. test_frame_ids > train_frame_ids
+                while test_frame_ids is None:
+                    short_frame_id = self._sample_visible_ids(visible, num_ids=1, min_id=self.long_num_train_frames + self.short_num_train_frames - 1,
+                                                              max_id=len(visible) - self.num_test_frames - self.short_num_train_frames+1)
+                    short_frame_id = [short_frame_id[0] - offset for offset in reversed(range(self.short_num_train_frames))]
+                    long_frame_id = self._sample_visible_ids(visible, num_ids=self.long_num_train_frames,
+                                                             min_id=short_frame_id[0] - self.max_gap - gap_increase,
+                                                             max_id=short_frame_id[0])
+                    if long_frame_id is None:
+                        gap_increase += 5
+                        continue
+                    train_frame_ids = short_frame_id + long_frame_id
+                    test_frame_ids = self._sample_visible_ids(visible, min_id=short_frame_id[0] + 1,
                                                               max_id=train_frame_ids[0] + self.max_gap + gap_increase,
                                                               num_ids=self.num_test_frames)
                     # Increase gap until a frame is found
