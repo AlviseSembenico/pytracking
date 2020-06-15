@@ -48,7 +48,6 @@ class BaseTrainer:
         else:
             self._checkpoint_dir = None
 
-
     def train(self, max_epochs, load_latest=False, fail_safe=True):
         """Do training for the given number of epochs.
         args:
@@ -87,10 +86,8 @@ class BaseTrainer:
 
         print('Finished training!')
 
-
     def train_epoch(self):
         raise NotImplementedError
-
 
     def save_checkpoint(self):
         """Saves a checkpoint of the network and other variables."""
@@ -111,7 +108,6 @@ class BaseTrainer:
             'settings': self.settings
         }
 
-
         directory = '{}/{}'.format(self._checkpoint_dir, self.settings.project_path)
         if not os.path.exists(directory):
             os.makedirs(directory)
@@ -125,8 +121,7 @@ class BaseTrainer:
         # Now rename to actual checkpoint. os.rename seems to be atomic if files are on same filesystem. Not 100% sure
         os.rename(tmp_file_path, file_path)
 
-
-    def load_checkpoint(self, checkpoint = None, fields = None, ignore_fields = None, load_constructor = False):
+    def load_checkpoint(self, checkpoint=None, fields=None, ignore_fields=None, load_constructor=False):
         """Loads a network checkpoint file.
 
         Can be called in three different ways:
@@ -143,12 +138,18 @@ class BaseTrainer:
         actor_type = type(self.actor).__name__
         net_type = type(net).__name__
 
+        pretrained = False
         if checkpoint is None:
             # Load most recent checkpoint
             checkpoint_list = sorted(glob.glob('{}/{}/{}_ep*.pth.tar'.format(self._checkpoint_dir,
                                                                              self.settings.project_path, net_type)))
+            base_check = glob.glob('{}/{}/dimp50.pth'.format(self._checkpoint_dir, self.settings.project_path))
             if checkpoint_list:
                 checkpoint_path = checkpoint_list[-1]
+            elif base_check:
+                checkpoint_path = base_check[0]
+                pretrained = True
+                print('No new checkpoint, using the pretrained model')
             else:
                 print('No matching checkpoint file found')
                 return
@@ -171,13 +172,16 @@ class BaseTrainer:
 
         # Load network
         checkpoint_dict = loading.torch_load_legacy(checkpoint_path)
-
         assert net_type == checkpoint_dict['net_type'], 'Network is not of correct type.'
 
         if fields is None:
             fields = checkpoint_dict.keys()
         if ignore_fields is None:
             ignore_fields = ['settings']
+
+        if pretrained:
+            checkpoint_dict['epoch'] = 1
+            ignore_fields.append('optimizer')
 
             # Never load the scheduler. It exists in older checkpoints.
         ignore_fields.extend(['lr_scheduler', 'constructor', 'net_type', 'actor_type', 'net_info'])
@@ -187,7 +191,7 @@ class BaseTrainer:
             if key in ignore_fields:
                 continue
             if key == 'net':
-                net.load_state_dict(checkpoint_dict[key])
+                net.load_my_state_dict(checkpoint_dict[key])
             elif key == 'optimizer':
                 self.optimizer.load_state_dict(checkpoint_dict[key])
             else:

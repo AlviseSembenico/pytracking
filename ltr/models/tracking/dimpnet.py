@@ -1,6 +1,7 @@
 import math
 import torch
 import torch.nn as nn
+from torch.nn.parameter import Parameter
 from collections import OrderedDict
 from ltr.models.meta import steepestdescent
 import ltr.models.target_classifier.linear_filter as target_clf
@@ -117,6 +118,17 @@ class DiMPnet(nn.Module):
         all_feat = self.feature_extractor(im, backbone_layers)
         all_feat['classification'] = self.extract_classification_feat(all_feat)
         return OrderedDict({l: all_feat[l] for l in layers})
+
+    def load_my_state_dict(self, state_dict):
+
+        own_state = self.state_dict()
+        for name, param in state_dict.items():
+            if name not in own_state:
+                continue
+            if isinstance(param, Parameter):
+                # backwards compatibility for serialized parameters
+                param = param.data
+            own_state[name].copy_(param)
 
 
 @model_constructor

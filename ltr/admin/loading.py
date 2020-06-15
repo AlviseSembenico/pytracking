@@ -58,6 +58,8 @@ def load_network(network_dir=None, checkpoint=None, constructor_fun_name=None, c
         checkpoint_list = sorted(net_path.glob('*.pth.tar'))
         if checkpoint_list:
             checkpoint_path = checkpoint_list[-1]
+        elif a:
+            pass
         else:
             raise Exception('No matching checkpoint file found')
     elif isinstance(checkpoint, int):
