@@ -22,16 +22,19 @@ class DiMPActor(BaseActor):
             stats  -  dict containing detailed losses
         """
         # Run network
-        target_scores, iou_pred, tl, ts, pred, sigmas, lengths, new_video = self.net(train_imgs=data['train_images'],
-                                                                                     test_imgs=data['test_images'],
-                                                                                     train_bb=data['train_anno'],
-                                                                                     test_proposals=data['test_proposals'],
-                                                                                     #  test_bb=data['test_anno'],
-                                                                                     #  gt=data['test_label'],
-                                                                                     epoch=epoch)
+        target_scores, iou_pred, sigma = self.net(train_imgs=data['train_images'],
+                                                  test_imgs=data['test_images'],
+                                                  train_bb=data['train_anno'],
+                                                  test_proposals=data['test_proposals'],
+                                                  #  test_bb=data['test_anno'],
+                                                  #  gt=data['test_label'],
+                                                  epoch=epoch)
+
+        # Extract the merged part
+        merged = target_scores.pop().view((*data['test_label'].shape[:2], 19, 19))
 
         # Classification losses for the different optimization iterations
-        clf_losses_test = [self.objective['test_clf'](s, data['test_label'], data['test_anno']) for s in target_scores]
+        clf_losses_test = [self.objective['test_clf'](s, data['test_label'], data['test_anno']) for memory in target_scores[:2] for s in memory]
 
         # Loss of the final filter
         clf_loss_test = clf_losses_test[-1]
@@ -54,12 +57,18 @@ class DiMPActor(BaseActor):
             else:
                 loss_test_iter_clf = (test_iter_weights / (len(clf_losses_test) - 2)) * sum(clf_losses_test[1:-1])
 
+        # Loss merger
+        loss_merger = self.loss_weight['merger']*(
+            sigma.log().mean() +
+            self.objective['test_clf'](merged, data['test_label'], data['test_anno']))
+
         # Total loss
-        loss = loss_iou + loss_target_classifier + loss_test_init_clf + loss_test_iter_clf
+        loss = loss_iou + loss_target_classifier + loss_test_init_clf + loss_test_iter_clf + loss_merger
 
         # Log stats
         stats = {'Loss/total': loss.item(),
                  'Loss/iou': loss_iou.item(),
+                 'Loss/merger': loss_merger.item(),
                  'Loss/target_clf': loss_target_classifier.item()}
         if 'test_init_clf' in self.loss_weight.keys():
             stats['Loss/test_init_clf'] = loss_test_init_clf.item()
@@ -69,7 +78,7 @@ class DiMPActor(BaseActor):
         if len(clf_losses_test) > 0:
             stats['ClfTrain/test_init_loss'] = clf_losses_test[0].item()
             if len(clf_losses_test) > 2:
-                stats['ClfTrain/test_iter_loss'] = sum(clf_losses_test[1:-1]).item() / (len(clf_losses_test) - 2)
+                stats['ClfTrain/test_iter_loss'] = sum(clf_losses_test[1: -1]).item() / (len(clf_losses_test) - 2)
 
         return loss, stats
 
@@ -131,7 +140,7 @@ class KLDiMPActor(BaseActor):
                 if isinstance(test_iter_weights, list):
                     loss_test_iter_clf = sum([a * b for a, b in zip(test_iter_weights, clf_losses_test[1:-1])])
                 else:
-                    loss_test_iter_clf = (test_iter_weights / (len(clf_losses_test) - 2)) * sum(clf_losses_test[1:-1])
+                    loss_test_iter_clf = (test_iter_weights / (len(clf_losses_test) - 2)) * sum(clf_losses_test[1: -1])
 
         # If PrDiMP classifier is used
         loss_clf_ce = 0
@@ -155,7 +164,7 @@ class KLDiMPActor(BaseActor):
                 if isinstance(test_iter_weights, list):
                     loss_clf_ce_iter = sum([a * b for a, b in zip(test_iter_weights, clf_ce_losses[1:-1])])
                 else:
-                    loss_clf_ce_iter = (test_iter_weights / (len(clf_ce_losses) - 2)) * sum(clf_ce_losses[1:-1])
+                    loss_clf_ce_iter = (test_iter_weights / (len(clf_ce_losses) - 2)) * sum(clf_ce_losses[1: -1])
 
         # Total loss
         loss = loss_bb_ce + loss_clf_ce + loss_clf_ce_init + loss_clf_ce_iter + \
@@ -186,13 +195,13 @@ class KLDiMPActor(BaseActor):
             if len(clf_losses_test) > 0:
                 stats['ClfTrain/test_init_loss'] = clf_losses_test[0].item()
                 if len(clf_losses_test) > 2:
-                    stats['ClfTrain/test_iter_loss'] = sum(clf_losses_test[1:-1]).item() / (len(clf_losses_test) - 2)
+                    stats['ClfTrain/test_iter_loss'] = sum(clf_losses_test[1: -1]).item() / (len(clf_losses_test) - 2)
 
         if 'clf_ce' in self.loss_weight.keys():
             stats['ClfTrain/clf_ce'] = clf_ce.item()
             if len(clf_ce_losses) > 0:
                 stats['ClfTrain/clf_ce_init'] = clf_ce_losses[0].item()
                 if len(clf_ce_losses) > 2:
-                    stats['ClfTrain/clf_ce_iter'] = sum(clf_ce_losses[1:-1]).item() / (len(clf_ce_losses) - 2)
+                    stats['ClfTrain/clf_ce_iter'] = sum(clf_ce_losses[1: -1]).item() / (len(clf_ce_losses) - 2)
 
         return loss, stats

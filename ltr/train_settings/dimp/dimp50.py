@@ -12,8 +12,8 @@ from ltr import MultiGPU
 
 def run(settings):
     settings.description = 'Default train settings for DiMP with ResNet50 as backbone.'
-    settings.batch_size = 10
-    settings.num_workers = 8
+    settings.batch_size = 8
+    settings.num_workers = 4
     settings.multi_gpu = False
     settings.print_interval = 1
     settings.normalize_mean = [0.485, 0.456, 0.406]
@@ -101,7 +101,7 @@ def run(settings):
 
     objective = {'iou': nn.MSELoss(), 'test_clf': ltr_losses.LBHinge(threshold=settings.hinge_threshold)}
 
-    loss_weight = {'iou': 1, 'test_clf': 100, 'test_init_clf': 100, 'test_iter_clf': 400}
+    loss_weight = {'iou': 1, 'test_clf': 100, 'test_init_clf': 100, 'test_iter_clf': 400, 'merger': 1}
 
     actor = actors.DiMPActor(net=net, objective=objective, loss_weight=loss_weight)
 

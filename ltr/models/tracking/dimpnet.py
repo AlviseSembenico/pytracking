@@ -9,6 +9,7 @@ import ltr.models.target_classifier.initializer as clf_initializer
 import ltr.models.target_classifier.optimizer as clf_optimizer
 import ltr.models.bbreg as bbmodels
 import ltr.models.backbone as backbones
+from pytracking.tracker.dimp.merge_scores import getMergeScore, saveMergeScore
 from ltr import model_constructor
 
 
@@ -21,7 +22,7 @@ class DiMPnet(nn.Module):
         classification_layer:  Name of the backbone feature layer to use for classification.
         bb_regressor_layer:  Names of the backbone layers to use for bounding box regression."""
 
-    def __init__(self, feature_extractor, classifier, bb_regressor, classification_layer, bb_regressor_layer):
+    def __init__(self, feature_extractor, classifier, bb_regressor, classification_layer, bb_regressor_layer, scores_merger):
         super().__init__()
 
         self.feature_extractor = feature_extractor
@@ -30,6 +31,7 @@ class DiMPnet(nn.Module):
         self.classification_layer = [classification_layer] if isinstance(classification_layer, str) else classification_layer
         self.bb_regressor_layer = bb_regressor_layer
         self.output_layers = sorted(list(set(self.classification_layer + self.bb_regressor_layer)))
+        self.scores_merger = scores_merger
 
     def forward(self, train_imgs, test_imgs, train_bb, test_proposals, epoch, *args, **kwargs):
         """Runs the DiMP network the way it is applied during training.
@@ -46,25 +48,48 @@ class DiMPnet(nn.Module):
 
         assert train_imgs.dim() == 5 and test_imgs.dim() == 5, 'Expect 5 dimensional inputs'
 
-        # Extract backbone features
-        train_feat = self.extract_backbone_features(train_imgs.reshape(-1, *train_imgs.shape[-3:]))
-        test_feat = self.extract_backbone_features(test_imgs.reshape(-1, *test_imgs.shape[-3:]))
+        train_imgs_mem = [train_imgs[3*i:3*(i+1), ...] for i in range(2)]
+        train_bb = [train_bb[3*i:3*(i+1), ...] for i in range(2)]
+        if epoch < 15:
+            with torch.no_grad():
+                # Extract backbone features
+                train_feat = [self.extract_backbone_features(t_imgs.reshape(-1, *train_imgs.shape[-3:])) for t_imgs in train_imgs_mem]
+                test_feat = self.extract_backbone_features(test_imgs.reshape(-1, *test_imgs.shape[-3:]))
+        else:
+            train_feat = [self.extract_backbone_features(train_imgs.reshape(-1, *train_imgs.shape[-3:])) for t_imgs in train_imgs]
+            test_feat = self.extract_backbone_features(test_imgs.reshape(-1, *test_imgs.shape[-3:]))
 
         # Classification features
-        train_feat_clf = self.get_backbone_clf_feat(train_feat)
+        train_feat_clf = [self.get_backbone_clf_feat(tf) for tf in train_feat]
         test_feat_clf = self.get_backbone_clf_feat(test_feat)
 
         # Run classifier module
-        target_scores = self.classifier(train_feat_clf, test_feat_clf, train_bb, *args, **kwargs)
+        target_scores = [self.classifier(tfc, test_feat_clf, tb, *args, **kwargs) for tfc, tb in zip(train_feat_clf, train_bb)]
+        merged = self.merge_scores(target_scores[0][-1], target_scores[1][-1])
+        target_scores.append(merged[0])
 
         # Get bb_regressor features
-        train_feat_iou = self.get_backbone_bbreg_feat(train_feat)
-        test_feat_iou = self.get_backbone_bbreg_feat(test_feat)
+        if epoch > 15 or True:
+            train_feat_iou = [self.get_backbone_bbreg_feat(tf) for tf in train_feat]
+            test_feat_iou = self.get_backbone_bbreg_feat(test_feat)
 
-        # Run the IoUNet module
-        iou_pred = self.bb_regressor(train_feat_iou, test_feat_iou, train_bb, test_proposals)
+            # Run the IoUNet module
+            iou_pred = torch.stack(
+                [self.bb_regressor(tfi, test_feat_iou, tb, test_proposals)for tfi, tb in zip(train_feat_iou, train_bb)])
+        else:
+            iou_pred = torch.rand((*test_imgs.shape[:2], 8), device=test_imgs.device)
 
-        return target_scores, iou_pred
+        return target_scores, iou_pred, merged[1]
+
+    def merge_scores(self, long, short, last=None, hidden=None):
+        dim = short.shape[-1]
+        stacked = torch.cat((
+            long.unsqueeze(0),
+            short.unsqueeze(0)
+        ), axis=0)
+        if last == None:
+            last = torch.zeros(*long.shape, device=long.device).view(-1, 1, self.scores_merger.dim)
+        return self.scores_merger(stacked, last.view(-1, 1, self.scores_merger.dim), hidden=hidden)
 
     def get_backbone_clf_feat(self, backbone_feat):
         feat = OrderedDict({l: backbone_feat[l] for l in self.classification_layer})
@@ -189,8 +214,14 @@ def dimpnet50(filter_size=1, optim_iter=5, optim_init_step=1.0, optim_init_reg=0
     # Bounding box regressor
     bb_regressor = bbmodels.AtomIoUNet(input_dim=(4*128, 4*256), pred_input_dim=iou_input_dim, pred_inter_dim=iou_inter_dim)
 
+    scores_merger = getMergeScore(
+        net_path=None,
+        train=True,
+        device='cuda'
+    )
+
     # DiMP network
-    net = DiMPnet(feature_extractor=backbone_net, classifier=classifier, bb_regressor=bb_regressor,
+    net = DiMPnet(feature_extractor=backbone_net, classifier=classifier, bb_regressor=bb_regressor, scores_merger=scores_merger,
                   classification_layer=classification_layer, bb_regressor_layer=['layer2', 'layer3'])
     return net
 
