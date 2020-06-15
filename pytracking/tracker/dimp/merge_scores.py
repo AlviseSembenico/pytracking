@@ -23,16 +23,6 @@ class MergerScoreLSTMFeat(nn.Module):
         self.linear = nn.Sequential(
             nn.Linear(dim*3, 1024),
             nn.ReLU(),
-            nn.Linear(1024, 2048),
-            nn.Dropout(),
-            nn.ReLU(),
-            nn.Linear(2048, 2048),
-            nn.Dropout(),
-            nn.ReLU(),
-            nn.Linear(2048, 2048),
-            nn.ReLU(),
-            nn.Linear(2048, 1024),
-            nn.ReLU(),
             nn.Linear(1024, 1024),
             nn.Dropout(),
             nn.ReLU(),
@@ -43,7 +33,7 @@ class MergerScoreLSTMFeat(nn.Module):
         )
         self.hidden = None
 
-    def forward(self, x, temporal, hidden=None, flatten=True):
+    def predict(self, x, temporal, hidden=None, flatten=True):
         # Encoding
         pred, hidden = self.lstm(temporal, hidden)
 
@@ -51,7 +41,20 @@ class MergerScoreLSTMFeat(nn.Module):
 
         if flatten:
             x = x.flatten(1)
-        out = self.linear(torch.cat((x, pred.squeeze(1)), axis=1))
+        out = self.linear(torch.cat((x, pred.flatten(1)), axis=1))
+        out, sigma = out[:, :-1], nn.functional.relu(out[:, -1]+1)+1
+        return out, sigma, pred, hidden
+
+    def forward(self, x, temporal, hidden=None):
+        # Encoding
+        pred, hidden = self.lstm(temporal, hidden)
+
+        x.clamp_(0, 1)
+
+        pred = pred.view((1, *x.shape[1:3], 19, 19))
+        values = torch.cat((x, pred), axis=0).permute(2, 1, 0, 3, 4)
+
+        out = self.linear(values.flatten(2).flatten(end_dim=1))
         out, sigma = out[:, :-1], nn.functional.relu(out[:, -1]+1)+1
         return out, sigma, pred, hidden
 
