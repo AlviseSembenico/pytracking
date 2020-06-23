@@ -2,13 +2,14 @@ import os
 from collections import OrderedDict
 from ltr.trainers import BaseTrainer
 from ltr.admin.stats import AverageMeter, StatValue
+import torch.optim as optim
 from ltr.admin.tensorboard import TensorboardWriter
 import torch
 import time
 
 
 class LTRTrainer(BaseTrainer):
-    def __init__(self, actor, loaders, optimizer, settings, lr_scheduler=None):
+    def __init__(self, actor, loaders, optimizer, settings, lr_scheduler=None, future={}, future_loaders={}):
         """
         args:
             actor - The actor for training the network
@@ -28,7 +29,9 @@ class LTRTrainer(BaseTrainer):
         # Initialize tensorboard
         tensorboard_writer_dir = os.path.join(self.settings.env.tensorboard_dir, self.settings.project_path)
         self.tensorboard_writer = TensorboardWriter(tensorboard_writer_dir, [l.name for l in loaders])
-
+        self.future = future
+        self.future_loaders = future_loaders
+        self.num_iter = 0
         self.move_data_to_gpu = getattr(settings, 'move_data_to_gpu', True)
 
     def _set_default_settings(self):
@@ -72,6 +75,27 @@ class LTRTrainer(BaseTrainer):
 
             # print statistics
             self._print_stats(i, loader, batch_size)
+            self.num_iter += 1
+
+    def future_step(self):
+        for e in sorted(self.future.keys()):
+            if self.epoch >= e:
+                print(f'adding optimizer from epoch {self.epoch}')
+                for g in self.future[e][0]:
+                    g['params'] = g['params']()
+                    self.optimizer.add_param_group(g)
+                if self.future[e][1]:
+                    self.optimizer = self.optimizer.__class__(
+                        [p for i, p in enumerate(self.optimizer.param_groups) if i not in self.future[e][1]])
+                del self.future[e]
+
+        if self.epoch >= 5:
+            self.actor.net.scores_merger.disable_linear = True
+            self.actor.net.scores_merger.disable_lstm = False
+        for e in sorted(self.future_loaders.keys()):
+            if self.epoch >= e:
+                self.loaders[0] = self.future_loaders[e]
+                del self.future_loaders[e]
 
     def train_epoch(self):
         """Do one epoch for each loader."""
@@ -103,6 +127,9 @@ class LTRTrainer(BaseTrainer):
         batch_fps = batch_size / (current_time - self.prev_time)
         average_fps = self.num_frames / (current_time - self.start_time)
         self.prev_time = current_time
+        for k, v in self.stats[loader.name].items():
+            if getattr(v, 'val', False):
+                self.writer.add_scalar(loader.name + k, v.val, self.num_iter)
         if i % self.settings.print_interval == 0 or i == loader.__len__():
             print_str = '[%s: %d, %d / %d] ' % (loader.name, self.epoch, i, loader.__len__())
             print_str += 'FPS: %.1f (%.1f)  ,  ' % (average_fps, batch_fps)

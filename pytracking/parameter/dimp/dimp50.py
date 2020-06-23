@@ -1,6 +1,7 @@
 from pytracking.utils import TrackerParams
 from pytracking.features.net_wrappers import NetWithBackbone
 
+
 def parameters():
     params = TrackerParams()
 
@@ -31,8 +32,8 @@ def parameters():
     params.use_augmentation = True
     params.augmentation = {'fliplr': True,
                            'rotate': [10, -10, 45, -45],
-                           'blur': [(3,1), (1, 3), (2, 2)],
-                           'relativeshift': [(0.6, 0.6), (-0.6, 0.6), (0.6, -0.6), (-0.6,-0.6)],
+                           'blur': [(3, 1), (1, 3), (2, 2)],
+                           'relativeshift': [(0.6, 0.6), (-0.6, 0.6), (0.6, -0.6), (-0.6, -0.6)],
                            'dropout': (2, 0.2)}
 
     params.augmentation_expansion_factor = 2
@@ -60,8 +61,25 @@ def parameters():
     params.box_refinement_step_length = 1
     params.box_refinement_step_decay = 1
 
-    params.net = NetWithBackbone(net_path='dimp50.pth',
+    # Memory parameters
+    params.LT_module = 20
+    params.ST_module = 15
+    params.tukey_alpha = 0.450157
+    # TODO: fine tune this
+    params.lb_certainty_update = 0.5
+    params.hard_negative_lb = 2
+    params.hard_negative_offset = 6
+    params.hard_negative_size = 5
+    params.hard_negative_offset_h = int(params.hard_negative_offset/2)
+    params.lb = 0.3
+    params.ub_LT = 6e5
+    params.ub_ST = 6e5
+    params.lb_type = 'ensemble'
+
+    params.net = NetWithBackbone(net_path='DiMPnet_ep0029.pth.tar',
                                  use_gpu=params.use_gpu)
+    # params.net = NetWithBackbone(net_path='dimp50.pth',
+    #                              use_gpu=params.use_gpu)
 
     params.vot_anno_conversion_type = 'preserve_area'
 

@@ -103,7 +103,10 @@ class TrackingSampler(torch.utils.data.Dataset):
             seq_id = random.randint(0, dataset.get_num_sequences() - 1)
 
             # Sample frames
-            seq_info_dict = dataset.get_sequence_info(seq_id)
+            try:
+                seq_info_dict = dataset.get_sequence_info(seq_id)
+            except:
+                return self.__getitem__(index)
             visible = seq_info_dict['visible']
 
             enough_visible_frames = visible.type(torch.int64).sum().item() > 2 * (
@@ -174,8 +177,11 @@ class TrackingSampler(torch.utils.data.Dataset):
             # In case of image dataset, just repeat the image to generate synthetic video
             train_frame_ids = [1] * self.num_train_frames
             test_frame_ids = [1] * self.num_test_frames
-
-        train_frames, train_anno, meta_obj_train = dataset.get_frames(seq_id, train_frame_ids, seq_info_dict)
+        try:
+            train_frames, train_anno, meta_obj_train = dataset.get_frames(seq_id, train_frame_ids, seq_info_dict)
+        except:
+            print('skipeed a frame')
+            return self.__getitem__(index)
         test_frames, test_anno, meta_obj_test = dataset.get_frames(seq_id, test_frame_ids, seq_info_dict)
 
         data = TensorDict({'train_images': train_frames,
@@ -184,8 +190,11 @@ class TrackingSampler(torch.utils.data.Dataset):
                            'test_anno': test_anno['bbox'],
                            'dataset': dataset.get_name(),
                            'test_class': meta_obj_test.get('object_class_name')})
-
-        return self.processing(data)
+        try:
+            return self.processing(data)
+        except:
+            print('skipeed a frame')
+            return self.__getitem__(index)
 
 
 class DiMPSampler(TrackingSampler):

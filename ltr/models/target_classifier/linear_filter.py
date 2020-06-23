@@ -58,12 +58,12 @@ class LinearFilter(nn.Module):
         test_feat = self.extract_classification_feat(test_feat, num_sequences)
 
         # Train filter
-        filter, filter_iter, losses = self.get_filter(train_feat, train_bb, *args, **kwargs)
+        filter, filter_iter, losses, scores = self.get_filter(train_feat, train_bb, *args, **kwargs)
 
         # Classify samples using all return filters
         test_scores = [self.classify(f, test_feat) for f in filter_iter]
 
-        return test_scores
+        return test_scores, scores
 
     def extract_classification_feat(self, feat, num_sequences=None):
         """Extract classification features based on the input backbone features."""
@@ -97,12 +97,12 @@ class LinearFilter(nn.Module):
         weights = self.filter_initializer(feat, bb)
 
         if self.filter_optimizer is not None:
-            weights, weights_iter, losses = self.filter_optimizer(weights, feat=feat, bb=bb, *args, **kwargs)
+            weights, weights_iter, losses, scores = self.filter_optimizer(weights, feat=feat, bb=bb, *args, **kwargs)
         else:
             weights_iter = [weights]
             losses = None
 
-        return weights, weights_iter, losses
+        return weights, weights_iter, losses, scores
 
     def train_classifier(self, backbone_feat, bb):
         num_sequences = bb.shape[1]

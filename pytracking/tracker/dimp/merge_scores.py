@@ -26,35 +26,48 @@ class MergerScoreLSTMFeat(nn.Module):
             nn.Linear(1024, 1024),
             nn.Dropout(),
             nn.ReLU(),
+            nn.Linear(1024, 1024),
+            nn.Dropout(),
+            nn.ReLU(),
             nn.Linear(1024, 512),
             nn.Dropout(),
             nn.ReLU(),
             nn.Linear(512, dim+1),
         )
         self.hidden = None
+        self.disable_linear = False
+        self.disable_lstm = True
 
-    def predict(self, x, temporal, hidden=None, flatten=True):
+    def predict(self, x, temporal, hidden=None):
         # Encoding
-        pred, hidden = self.lstm(temporal, hidden)
+        pred, hidden = self.lstm(temporal.view(-1, 1, self.dim), hidden)
 
         x.clamp_(0, 1)
 
-        if flatten:
-            x = x.flatten(1)
-        out = self.linear(torch.cat((x, pred.flatten(1)), axis=1))
+        out = self.linear(torch.cat((x.view(2, 1, self.dim), pred), axis=0).view(1, -1))
         out, sigma = out[:, :-1], nn.functional.relu(out[:, -1]+1)+1
-        return out, sigma, pred, hidden
+        return out.view(1, 1, self.sqr_dim, self.sqr_dim), sigma, pred, hidden
 
-    def forward(self, x, temporal, hidden=None):
+    def forward(self, x, temporal, hidden=None, visdom=None):
         # Encoding
-        pred, hidden = self.lstm(temporal, hidden)
+        if self.disable_lstm:
+            with torch.no_grad():
+                pred, hidden = self.lstm(temporal, hidden)
+        else:
+            pred, hidden = self.lstm(temporal, hidden)
+        pred = torch.stack([pred for i in range(3)]).view(-1, *pred.shape[-2:])[:, -1, :]
 
         x.clamp_(0, 1)
 
         pred = pred.view((1, *x.shape[1:3], 19, 19))
-        values = torch.cat((x, pred), axis=0).permute(2, 1, 0, 3, 4)
+        values = torch.cat((x, pred), axis=0).permute(1, 2, 0, 3, 4)
 
-        out = self.linear(values.flatten(2).flatten(end_dim=1))
+        # visdom.register(values.flatten(end_dim=1)[10, 0, :], 'heatmap', 1, 'test in')
+        if self.disable_linear:
+            with torch.no_grad():
+                out = self.linear(values.flatten(2).flatten(end_dim=1))
+        else:
+            out = self.linear(values.flatten(2).flatten(end_dim=1))
         out, sigma = out[:, :-1], nn.functional.relu(out[:, -1]+1)+1
         return out, sigma, pred, hidden
 
