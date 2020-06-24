@@ -34,7 +34,7 @@ class DiMPnet(nn.Module):
         self.output_layers = sorted(list(set(self.classification_layer + self.bb_regressor_layer)))
         self.scores_merger = scores_merger
 
-    def forward(self, train_imgs, test_imgs, train_bb, test_proposals, epoch, *args, **kwargs):
+    def forward(self, train_imgs, test_imgs, train_bb, test_proposals, epoch, visdom, *args, **kwargs):
         """Runs the DiMP network the way it is applied during training.
         The forward function is ONLY used for training. Call the individual functions during tracking.
         args:
@@ -49,48 +49,54 @@ class DiMPnet(nn.Module):
 
         assert train_imgs.dim() == 5 and test_imgs.dim() == 5, 'Expect 5 dimensional inputs'
 
-        train_imgs_mem = [train_imgs[3*i:3*(i+1), ...] for i in range(2)]
-        train_bb = [train_bb[3*i:3*(i+1), ...] for i in range(2)]
         if epoch < 15:
             with torch.no_grad():
                 # Extract backbone features
-                train_feat = [self.extract_backbone_features(t_imgs.reshape(-1, *train_imgs.shape[-3:])) for t_imgs in train_imgs_mem]
+                train_feat = self.extract_backbone_features(train_imgs.reshape(-1, *train_imgs.shape[-3:]))
                 test_feat = self.extract_backbone_features(test_imgs.reshape(-1, *test_imgs.shape[-3:]))
         else:
-            train_feat = [self.extract_backbone_features(train_imgs.reshape(-1, *train_imgs.shape[-3:])) for t_imgs in train_imgs]
+            train_feat = self.extract_backbone_features(train_imgs.reshape(-1, *train_imgs.shape[-3:]))
             test_feat = self.extract_backbone_features(test_imgs.reshape(-1, *test_imgs.shape[-3:]))
 
         # Classification features
-        train_feat_clf = [self.get_backbone_clf_feat(tf) for tf in train_feat]
+        train_feat_clf = self.get_backbone_clf_feat(train_feat)
         test_feat_clf = self.get_backbone_clf_feat(test_feat)
 
         # Run classifier module
-        target_scores = [self.classifier(tfc, test_feat_clf, tb, *args, **kwargs) for tfc, tb in zip(train_feat_clf, train_bb)]
-        merged = self.merge_scores(target_scores[0][-1], target_scores[1][-1])
-        target_scores.append(merged[0])
+        train_feat_clf_t = train_feat_clf.view((*train_imgs.shape[:2], *train_feat_clf.shape[1:]))
+        train_feat_clf_split = [train_feat_clf_t[:3, ...], train_feat_clf_t[:3, ...]]
+        train_bb_split = [train_bb[:3, ...], train_bb[:3, ...]]
+        target_scores = [self.classifier(tf, test_feat_clf, tb, * args, **kwargs) for tf, tb in zip(train_feat_clf_split, train_bb_split)]
+        past_target_scores = [ts[1] for ts in target_scores]
+        target_scores = list(map(lambda x: x[0], target_scores))
+        # Run the merger
+        merged = self.merge_scores(target_scores[0][-1], target_scores[1][-1], past_target_scores, visdom=visdom)
 
         # Get bb_regressor features
         if epoch > 15 or True:
-            train_feat_iou = [self.get_backbone_bbreg_feat(tf) for tf in train_feat]
+            train_feat_iou = self.get_backbone_bbreg_feat(train_feat)
             test_feat_iou = self.get_backbone_bbreg_feat(test_feat)
 
             # Run the IoUNet module
-            iou_pred = torch.stack(
-                [self.bb_regressor(tfi, test_feat_iou, tb, test_proposals)for tfi, tb in zip(train_feat_iou, train_bb)])
+            iou_pred = self.bb_regressor(train_feat_iou, test_feat_iou, train_bb, test_proposals)
+            # iou_pred = torch.stack(
+            #     [self.bb_regressor(tfi, test_feat_iou, tb, test_proposals)for tfi, tb in zip(train_feat_iou, train_bb)])
         else:
             iou_pred = torch.rand((*test_imgs.shape[:2], 8), device=test_imgs.device)
 
-        return target_scores, iou_pred, merged[1]
+        return target_scores, iou_pred, merged[0], merged[1]
 
-    def merge_scores(self, long, short, last=None, hidden=None):
+    def merge_scores(self, long, short, last=None, hidden=None, visdom=None):
         dim = short.shape[-1]
         stacked = torch.cat((
             long.unsqueeze(0),
             short.unsqueeze(0)
         ), axis=0)
-        if last == None:
-            last = torch.zeros(*long.shape, device=long.device).view(-1, 1, self.scores_merger.dim)
-        return self.scores_merger(stacked, last.view(-1, 1, self.scores_merger.dim), hidden=hidden)
+        if last == None or self.scores_merger.disable_lstm:
+            last = torch.zeros((long.shape[1], 1, self.scores_merger.dim_lstm), device=long.device).view(-1, 1, self.scores_merger.dim)
+        else:
+            last = torch.cat(last).permute(1, 0, 2, 3).flatten(2)
+        return self.scores_merger(stacked, last, hidden=hidden, visdom=visdom)
 
     def get_backbone_clf_feat(self, backbone_feat):
         feat = OrderedDict({l: backbone_feat[l] for l in self.classification_layer})

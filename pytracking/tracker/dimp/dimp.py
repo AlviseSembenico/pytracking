@@ -82,6 +82,7 @@ class DiMP(BaseTracker):
         self.LT_Module = LT_ModuleDiff(self.params.LT_module, self.params.lb, self.params.ub_LT, self.params.hard_negative_size, alpha=self.params.tukey_alpha)
         self.ST_Module = ST_ModuleDiff(self.params.ST_module, self.params.ub_ST, self.params.hard_negative_size)
         self.memories = [self.LT_Module, self.ST_Module]
+        self.last_target_scores = None
         # Extract and transform sample
         init_backbone_feat = self.generate_init_samples(im)
 
@@ -117,8 +118,10 @@ class DiMP(BaseTracker):
         sample_pos, sample_scales = self.get_sample_location(sample_coords)
 
         # Compute classification scores
-        scores_raw = self.classify_target(test_x)
-        scores_raw = self.net.scores_merger.predict(torch.stack(scores_raw), scores_raw[0])[0]
+        scores_raw_memory = self.classify_target(test_x)
+        scores_raw = self.net.scores_merger.predict(torch.stack(scores_raw_memory),
+                                                    self.last_target_scores if self.last_target_scores is not None else scores_raw_memory[0])[0]
+        last_target_scores = scores_raw
         # Localize the target
         translation_vec, scale_ind, s, flag = self.localize_target(scores_raw, sample_pos, sample_scales)
         new_pos = sample_pos[scale_ind, :] + translation_vec
@@ -161,7 +164,10 @@ class DiMP(BaseTracker):
         self.debug_info['flag' + self.id_str] = flag
         self.debug_info['max_score' + self.id_str] = max_score
         if self.visdom is not None:
-            self.visdom.register(score_map, 'heatmap', 2, 'Score Map' + self.id_str)
+            self.visdom.register(score_map, 'heatmap', 1, 'Score Merged' + self.id_str)
+            self.visdom.register(scores_raw_memory[1].squeeze(), 'heatmap', 1, 'Score Short' + self.id_str)
+            self.visdom.register(scores_raw_memory[0].squeeze(), 'heatmap', 1, 'Score Logn' + self.id_str)
+            # self.visdom.register(score_map, 'heatmap', 1, 'Score Map' + self.id_str)
             self.visdom.register(self.debug_info, 'info_dict', 1, 'Status')
         elif self.params.debug >= 2:
             show_tensor(score_map, 5, title='Max score = {:.2f}'.format(max_score))
@@ -614,19 +620,31 @@ class DiMP(BaseTracker):
 
         if num_iter > 0:
             # Get inputs for the DiMP filter optimizer module
-            samples = self.training_samples[0][:self.num_stored_samples[0], ...]
-            target_boxes = self.target_boxes[:self.num_stored_samples[0], :].clone()
-            sample_weights = self.sample_weights[0][:self.num_stored_samples[0]]
+            # samples = self.training_samples[0][:self.num_stored_samples[0], ...]
+            # target_boxes = self.target_boxes[:self.num_stored_samples[0], :].clone()
+            # sample_weights = self.sample_weights[0][:self.num_stored_samples[0]]
 
             # Run the filter optimizer module
-            with torch.no_grad():
-                for i, target_filter in enumerate(self.target_filters):
-                    new_target_filter, _, losses, scores = self.net.classifier.filter_optimizer(target_filter,
-                                                                                                num_iter=num_iter, feat=samples,
-                                                                                                bb=target_boxes,
-                                                                                                sample_weight=sample_weights,
-                                                                                                compute_losses=plot_loss)
-                    self.target_filters[i] = new_target_filter
+            for i, (target_filter, memory) in enumerate(zip(self.target_filters, self.memories)):
+                # Get samples and bb from the memory
+                samples, target_boxes, sample_weights, sample_weights_neg = memory.get_diff_template_n
+
+                # Save current filter if
+                samples = samples.clone().detach()
+                samples.requires_grad = True
+
+                new_target_filter, _, losses, scores = self.net.classifier.filter_optimizer(target_filter,
+                                                                                            num_iter=num_iter, feat=samples,
+                                                                                            bb=target_boxes,
+                                                                                            sample_weight=sample_weights,
+                                                                                            compute_losses=plot_loss)
+                # If some temp templates has been discarted, it has to run again
+                diff = (new_target_filter-target_filter).abs()
+                res = memory.after_classifier(diff, samples)
+                samples, target_boxes, sample_weights, sample_weights_neg = memory.augmented_template_n
+                # If new samples are accepted, the new filter is stores
+                if res:
+                    self.target_filters[i] = new_target_filter.detach()
 
             if plot_loss:
                 if isinstance(losses, dict):

@@ -10,14 +10,14 @@ class EnvSettings:
         self.segmentation_path = '{}/segmentation_results/'.format(pytracking_path)
         self.network_path = '{}/networks/'.format(pytracking_path)
         self.result_plot_path = '{}/result_plots/'.format(pytracking_path)
-        self.otb_path = ''
+        self.otb_path = '/var/scratch/asembeni/OTB100/OTB100'
         self.nfs_path = ''
         self.uav_path = ''
         self.tpl_path = ''
         self.vot_path = ''
         self.got10k_path = ''
         self.lasot_path = ''
-        self.trackingnet_path = ''
+        self.trackingnet_path = '/hdd/datasets/TrackingNet'
         self.davis_dir = ''
         self.youtubevos_dir = ''
 

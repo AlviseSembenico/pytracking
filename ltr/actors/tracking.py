@@ -5,11 +5,13 @@ import torch
 class DiMPActor(BaseActor):
     """Actor for training the DiMP network."""
 
-    def __init__(self, net, objective, loss_weight=None):
+    def __init__(self, net, objective, loss_weight=None, visdom=None):
         super().__init__(net, objective)
         if loss_weight is None:
             loss_weight = {'iou': 1.0, 'test_clf': 1.0}
         self.loss_weight = loss_weight
+        self.visdom = visdom
+        self.num_iter = 0
 
     def __call__(self, data, epoch):
         """
@@ -22,19 +24,28 @@ class DiMPActor(BaseActor):
             stats  -  dict containing detailed losses
         """
         # Run network
-        target_scores, iou_pred, sigma = self.net(train_imgs=data['train_images'],
-                                                  test_imgs=data['test_images'],
-                                                  train_bb=data['train_anno'],
-                                                  test_proposals=data['test_proposals'],
-                                                  #  test_bb=data['test_anno'],
-                                                  #  gt=data['test_label'],
-                                                  epoch=epoch)
-
+        target_scores, iou_pred, merged, sigma = self.net(train_imgs=data['train_images'],
+                                                          test_imgs=data['test_images'],
+                                                          train_bb=data['train_anno'],
+                                                          test_proposals=data['test_proposals'],
+                                                          #  test_bb=data['test_anno'],
+                                                          #  gt=data['test_label'],
+                                                          epoch=epoch,
+                                                          visdom=self.visdom)
+        if self.visdom is not None and self.num_iter % 100 == 0:
+            for i in [5, 10]:
+                self.visdom.register(target_scores[0][5].flatten(end_dim=1)[i].view(19, 19), 'heatmap', 1, f'Short score {i}')
+                self.visdom.register(target_scores[1][5].flatten(end_dim=1)[i].view(19, 19), 'heatmap', 1, f'Long score {i}')
+                self.visdom.register(merged[i].view(19, 19), 'heatmap', 1, f'Merged score {i}')
+                self.visdom.register(data['test_label'].view(*merged.shape)[i].view(19, 19), 'heatmap', 1, f'Test label {i}')
+                # self.visdom.register(data['test_label'].flatten(end_dim=1)[i, :], 'heatmap', 1, f'test out {i}')
+        self.num_iter += 1
         # Extract the merged part
-        merged = target_scores.pop().view((*data['test_label'].shape[:2], 19, 19))
+        merged = merged.view((*data['test_label'].shape[:2], 19, 19))
 
         # Classification losses for the different optimization iterations
-        clf_losses_test = [self.objective['test_clf'](s, data['test_label'], data['test_anno']) for memory in target_scores[:2] for s in memory]
+        clf_losses_test = [[self.objective['test_clf'](s, data['test_label'], data['test_anno']) for s in memory]for memory in target_scores[:2]]
+        clf_losses_test = [sum(i) for i in zip(*clf_losses_test)]
 
         # Loss of the final filter
         clf_loss_test = clf_losses_test[-1]
@@ -59,16 +70,21 @@ class DiMPActor(BaseActor):
 
         # Loss merger
         loss_merger = self.loss_weight['merger']*(
-            sigma.log().mean() +
-            self.objective['test_clf'](merged, data['test_label'], data['test_anno']))
-
+            (self.objective['test_clf_merger'](merged, data['test_label'], data['test_anno'])
+             .view((*sigma.shape, -1)).mean(1)/(2*sigma**2)).mean())
+        loss_sigma = sigma.log().mean()
+        # loss_merger = self.loss_weight['merger']*self.objective['test_clf'](merged, data['test_label'], data['test_anno'])
+        # for i in [10, 20]:
+        #     self.visdom.register(target_scores[0][5].flatten(end_dim=1)[i].view(19, 19), 'heatmap', 1, f'Short score {i}')
+        #     self.visdom.register(target_scores[1][5].flatten(end_dim=1)[i].view(19, 19), 'heatmap', 1, f'Long score {i}')
         # Total loss
-        loss = loss_iou + loss_target_classifier + loss_test_init_clf + loss_test_iter_clf + loss_merger
+        loss = loss_iou + loss_target_classifier + loss_test_init_clf + loss_test_iter_clf + loss_merger + loss_sigma
 
         # Log stats
         stats = {'Loss/total': loss.item(),
                  'Loss/iou': loss_iou.item(),
                  'Loss/merger': loss_merger.item(),
+                 'Loss/sigma': loss_sigma.item(),
                  'Loss/target_clf': loss_target_classifier.item()}
         if 'test_init_clf' in self.loss_weight.keys():
             stats['Loss/test_init_clf'] = loss_test_init_clf.item()

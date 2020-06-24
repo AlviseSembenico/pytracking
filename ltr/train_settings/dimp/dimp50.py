@@ -10,10 +10,23 @@ import ltr.data.transforms as tfm
 from ltr import MultiGPU
 
 
+from pytracking.utils.visdom import Visdom
+
+
+def visdom_ui_handler(self, data):
+    pass
+
+
+try:
+    visdom = Visdom(3, {'win_id':  'Tracking', 'handler': visdom_ui_handler}, visdom_info={})
+except:
+    visdom = None
+
+
 def run(settings):
     settings.description = 'Default train settings for DiMP with ResNet50 as backbone.'
-    settings.batch_size = 8
-    settings.num_workers = 4
+    settings.batch_size = 5
+    settings.num_workers = 8
     settings.multi_gpu = False
     settings.print_interval = 1
     settings.normalize_mean = [0.485, 0.456, 0.406]
@@ -79,6 +92,9 @@ def run(settings):
     loader_train = LTRLoader('train', dataset_train, training=True, batch_size=settings.batch_size, num_workers=settings.num_workers,
                              shuffle=True, drop_last=True, stack_dim=1)
 
+    loader_train2 = LTRLoader('train', dataset_train, training=True, batch_size=5, num_workers=settings.num_workers,
+                              shuffle=True, drop_last=True, stack_dim=1)
+
     # Validation samplers and loaders
     dataset_val = sampler.DiMPSampler([got10k_val], [1], samples_per_epoch=5000, max_gap=30,
                                       num_test_frames=3, num_train_frames=3, frame_sample_mode='memory',
@@ -99,22 +115,39 @@ def run(settings):
     if settings.multi_gpu:
         net = MultiGPU(net, dim=1)
 
-    objective = {'iou': nn.MSELoss(), 'test_clf': ltr_losses.LBHinge(threshold=settings.hinge_threshold)}
+    objective = {
+        'iou': nn.MSELoss(),
+        'test_clf': ltr_losses.LBHinge(threshold=settings.hinge_threshold),
+        'test_clf_merger': ltr_losses.LBHinge(threshold=settings.hinge_threshold, error_metric=nn.MSELoss(reduction='none'))}
 
-    loss_weight = {'iou': 1, 'test_clf': 100, 'test_init_clf': 100, 'test_iter_clf': 400, 'merger': 1}
+    loss_weight = {'iou': 1, 'test_clf': 100, 'test_init_clf': 100, 'test_iter_clf': 400, 'merger': 1000}
 
-    actor = actors.DiMPActor(net=net, objective=objective, loss_weight=loss_weight)
+    actor = actors.DiMPActor(net=net, objective=objective, loss_weight=loss_weight, visdom=visdom)
 
     # Optimizer
     optimizer = optim.Adam([{'params': actor.net.classifier.filter_initializer.parameters(), 'lr': 5e-5},
                             {'params': actor.net.classifier.filter_optimizer.parameters(), 'lr': 5e-4},
                             {'params': actor.net.classifier.feature_extractor.parameters(), 'lr': 5e-5},
-                            {'params': actor.net.bb_regressor.parameters()},
+                            {'params': actor.net.scores_merger.parameters()},
                             {'params': actor.net.feature_extractor.parameters(), 'lr': 2e-5}],
                            lr=2e-4)
 
+    optimizer = optim.Adam([
+        {'params': actor.net.scores_merger.linear.parameters(), 'lr': 2e-4},
+    ],
+        lr=2e-8)
+    future = {
+        5: ([
+            {'params': actor.net.classifier.filter_initializer.parameters, 'lr': 5e-8},
+            {'params': actor.net.classifier.filter_optimizer.parameters, 'lr': 5e-7},
+            {'params': actor.net.classifier.feature_extractor.parameters, 'lr': 5e-8},
+            {'params': actor.net.feature_extractor.parameters, 'lr': 2e-8},
+            {'params': actor.net.scores_merger.lstm.parameters, 'lr': 2e-4}
+        ], [0])
+    }
+
     lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=15, gamma=0.2)
 
-    trainer = LTRTrainer(actor, [loader_train, loader_val], optimizer, settings, lr_scheduler)
+    trainer = LTRTrainer(actor, [loader_train, loader_val], optimizer, settings, lr_scheduler, future=future)
 
-    trainer.train(50, load_latest=True, fail_safe=True)
+    trainer.train(50, load_latest=True, fail_safe=False)

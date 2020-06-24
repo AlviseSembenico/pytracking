@@ -25,10 +25,10 @@ class Differential:
             if contrib < self._ub:
                 keep.append(i)
         for i in keep:
-            self.update(self.temp[i, :].unsqueeze(0), self.temp_bb[i, :], self.temp_w[i].unsqueeze(0), self.temp_img[i])
+            self.update(self.temp[i, :].unsqueeze(0), self.temp_bb[i, :], self.temp_w[i].unsqueeze(0))
 
         self.flush_temp()
-        return len(keep) < num_temp
+        return len(keep) == num_temp
 
     @property
     def get_diff_template_n(self) -> Sequence[torch.Tensor]:

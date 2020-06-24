@@ -4,6 +4,8 @@ import torch
 import traceback
 from ltr.admin import loading, multigpu
 
+from torch.utils.tensorboard import SummaryWriter
+
 
 class BaseTrainer:
     """Base trainer class. Contains functions for training and saving/loading chackpoints.
@@ -26,6 +28,7 @@ class BaseTrainer:
 
         self.update_settings(settings)
 
+        self.writer = SummaryWriter()
         self.epoch = 0
         self.stats = {}
 
@@ -64,6 +67,7 @@ class BaseTrainer:
                     self.load_checkpoint()
 
                 for epoch in range(self.epoch+1, max_epochs+1):
+                    self.future_step()
                     self.epoch = epoch
 
                     self.train_epoch()
@@ -185,7 +189,11 @@ class BaseTrainer:
 
             # Never load the scheduler. It exists in older checkpoints.
         ignore_fields.extend(['lr_scheduler', 'constructor', 'net_type', 'actor_type', 'net_info'])
-
+        try:
+            self.epoch = checkpoint_dict['epoch']
+            self.future_step()
+        except:
+            pass
         # Load all fields
         for key in fields:
             if key in ignore_fields:
