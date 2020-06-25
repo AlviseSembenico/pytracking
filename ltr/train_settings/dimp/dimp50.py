@@ -125,25 +125,18 @@ def run(settings):
     actor = actors.DiMPActor(net=net, objective=objective, loss_weight=loss_weight, visdom=visdom)
 
     # Optimizer
-    optimizer = optim.Adam([{'params': actor.net.classifier.filter_initializer.parameters(), 'lr': 5e-5},
-                            {'params': actor.net.classifier.filter_optimizer.parameters(), 'lr': 5e-4},
-                            {'params': actor.net.classifier.feature_extractor.parameters(), 'lr': 5e-5},
-                            {'params': actor.net.scores_merger.parameters()},
-                            {'params': actor.net.feature_extractor.parameters(), 'lr': 2e-5}],
-                           lr=2e-4)
-
     optimizer = optim.Adam([
-        {'params': actor.net.scores_merger.linear.parameters(), 'lr': 2e-4},
+        {'params': actor.net.scores_merger.parameters(), 'lr': 2e-4}
     ],
         lr=2e-8)
     future = {
-        5: ([
-            {'params': actor.net.classifier.filter_initializer.parameters, 'lr': 5e-8},
-            {'params': actor.net.classifier.filter_optimizer.parameters, 'lr': 5e-7},
-            {'params': actor.net.classifier.feature_extractor.parameters, 'lr': 5e-8},
-            {'params': actor.net.feature_extractor.parameters, 'lr': 2e-8},
-            {'params': actor.net.scores_merger.lstm.parameters, 'lr': 2e-4}
-        ], [0])
+        6: ([
+            {'params': actor.net.classifier.filter_initializer.parameters(), 'lr': 5e-8},
+            {'params': actor.net.classifier.filter_optimizer.parameters(), 'lr': 5e-7},
+            {'params': actor.net.classifier.feature_extractor.parameters(), 'lr': 5e-8},
+            {'params': actor.net.feature_extractor.parameters(), 'lr': 2e-8},
+            {'params': actor.net.bb_regressor.parameters(), 'lr': 2e-7},
+        ], [])
     }
 
     lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=15, gamma=0.2)

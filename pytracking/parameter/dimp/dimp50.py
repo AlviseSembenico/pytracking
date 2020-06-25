@@ -76,11 +76,11 @@ def parameters():
     params.ub_ST = 6e5
     params.lb_type = 'ensemble'
 
-    params.net = NetWithBackbone(net_path='DiMPnet_ep0029.pth.tar',
+    params.net = NetWithBackbone(net_path='/hdd/projects/pytracking2/pytracking/checkpoints/ltr/dimp/dimp50/DiMPnet_ep0035.pth.tar',
                                  use_gpu=params.use_gpu)
     # params.net = NetWithBackbone(net_path='dimp50.pth',
     #                              use_gpu=params.use_gpu)
 
-    params.vot_anno_conversion_type = 'preserve_area'
+   params.vot_anno_conversion_type = 'preserve_area'
 
     return params

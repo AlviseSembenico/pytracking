@@ -119,12 +119,22 @@ class DiMP(BaseTracker):
 
         # Compute classification scores
         scores_raw_memory = self.classify_target(test_x)
-        scores_raw = self.net.scores_merger.predict(torch.stack(scores_raw_memory),
-                                                    self.last_target_scores if self.last_target_scores is not None else scores_raw_memory[0])[0]
+        scores_raw, sigma = self.net.scores_merger.predict(torch.stack(scores_raw_memory),
+                                                           self.last_target_scores if self.last_target_scores is not None else scores_raw_memory[0])
         last_target_scores = scores_raw
+
         # Localize the target
         translation_vec, scale_ind, s, flag = self.localize_target(scores_raw, sample_pos, sample_scales)
         new_pos = sample_pos[scale_ind, :] + translation_vec
+
+        # Get hard negative samples
+        negative_flag = scores_raw.max() > self.params.hard_negative_lb * scores_raw.max()
+        if negative_flag:
+            # Normalize the matrix
+            merged_unnorm = scores_raw.clone()
+            scores_raw = scores_raw * (1/scores_raw.max())
+            translation_vec_neg, scale_ind_neg, s_neg, flag_neg = self.localize_target(scores_raw.unsqueeze(0), sample_scales)
+            pos_negative = sample_pos[scale_ind_neg, :] + translation_vec_neg
 
         # Update position and scale
         if flag != 'not_found':
@@ -148,6 +158,11 @@ class DiMP(BaseTracker):
 
             # Create target_box and label for spatial sample
             target_box = self.get_iounet_box(self.pos, self.target_sz, sample_pos[scale_ind, :], sample_scales[scale_ind])
+
+            # Add the negative sample
+            if negative_flag:
+                target_box_negative = self.get_iounet_box(self.pos, self.target_sz, sample_pos[scale_ind_neg, :], sample_scales[scale_ind_neg])
+                self.memories[1].append_negative(train_x, target_box_negative)
 
             # Update the classifier model
             self.update_classifier(train_x, target_box, learning_rate, s[scale_ind, ...])

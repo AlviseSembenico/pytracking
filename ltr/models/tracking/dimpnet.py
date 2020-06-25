@@ -49,7 +49,7 @@ class DiMPnet(nn.Module):
 
         assert train_imgs.dim() == 5 and test_imgs.dim() == 5, 'Expect 5 dimensional inputs'
 
-        if epoch < 15:
+        if epoch < 6:
             with torch.no_grad():
                 # Extract backbone features
                 train_feat = self.extract_backbone_features(train_imgs.reshape(-1, *train_imgs.shape[-3:]))
@@ -66,14 +66,18 @@ class DiMPnet(nn.Module):
         train_feat_clf_t = train_feat_clf.view((*train_imgs.shape[:2], *train_feat_clf.shape[1:]))
         train_feat_clf_split = [train_feat_clf_t[:3, ...], train_feat_clf_t[:3, ...]]
         train_bb_split = [train_bb[:3, ...], train_bb[:3, ...]]
+
         target_scores = [self.classifier(tf, test_feat_clf, tb, * args, **kwargs) for tf, tb in zip(train_feat_clf_split, train_bb_split)]
+
+        # Extract the target scores of the training images set
         past_target_scores = [ts[1] for ts in target_scores]
         target_scores = list(map(lambda x: x[0], target_scores))
+
         # Run the merger
         merged = self.merge_scores(target_scores[0][-1], target_scores[1][-1], past_target_scores, visdom=visdom)
 
         # Get bb_regressor features
-        if epoch > 15 or True:
+        if epoch >= 6 or True:
             train_feat_iou = self.get_backbone_bbreg_feat(train_feat)
             test_feat_iou = self.get_backbone_bbreg_feat(test_feat)
 

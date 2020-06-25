@@ -82,7 +82,6 @@ class LTRTrainer(BaseTrainer):
             if self.epoch >= e:
                 print(f'adding optimizer from epoch {self.epoch}')
                 for g in self.future[e][0]:
-                    g['params'] = g['params']()
                     self.optimizer.add_param_group(g)
                 if self.future[e][1]:
                     self.optimizer = self.optimizer.__class__(

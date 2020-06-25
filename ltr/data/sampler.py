@@ -167,7 +167,7 @@ class TrackingSampler(torch.utils.data.Dataset):
                     if long_frame_id is None:
                         gap_increase += 5
                         continue
-                    train_frame_ids = short_frame_id + long_frame_id
+                    train_frame_ids = long_frame_id + short_frame_id
                     test_frame_ids = self._sample_visible_ids(visible, min_id=short_frame_id[0] + 1,
                                                               max_id=train_frame_ids[0] + self.max_gap + gap_increase,
                                                               num_ids=self.num_test_frames)
