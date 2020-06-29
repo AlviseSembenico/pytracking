@@ -43,7 +43,7 @@ class DiMP(BaseTracker):
 
         # Get target position and size
         state = info['init_bbox']
-        self.pos = torch.Tensor([state[1] + (state[3] - 1)/2, state[0] + (state[2] - 1)/2])
+        self.pos = torch.Tensor([state[1] + (state[3] - 1) / 2, state[0] + (state[2] - 1) / 2])
         self.target_sz = torch.Tensor([state[3], state[2]])
 
         # Get object id
@@ -96,6 +96,19 @@ class DiMP(BaseTracker):
         out = {'time': time.time() - tic}
         return out
 
+    def get_negative_sample(self, scores_short, merged):
+        scores_short = scores_short.clone().squeeze()
+        first_max = scores_short.argmax()
+        dimension = scores_short.shape
+        max_x, max_y = int(first_max / scores_short.shape[0]), (first_max % scores_short.shape[0]).item()
+        max_x_offset, max_y_offset = ((max(0, max_x - self.params.hard_negative_offset_h),
+                                       min(dimension[0], max_x + self.params.hard_negative_offset_h)),
+                                      (max(0, max_y - self.params.hard_negative_offset_h),
+                                       min(dimension[1], max_y + self.params.hard_negative_offset_h)))
+        scores_short[max_x_offset[0]:max_x_offset[1], max_y_offset[0]:max_y_offset[1]] = 0
+        negative_flag = scores_short.max() > self.params.hard_negative_lb * merged.max()
+        return negative_flag
+
     def track(self, image, info: dict = None) -> dict:
         self.debug_info = {}
 
@@ -121,19 +134,16 @@ class DiMP(BaseTracker):
         scores_raw_memory = self.classify_target(test_x)
         scores_raw, sigma = self.net.scores_merger.predict(torch.stack(scores_raw_memory),
                                                            self.last_target_scores if self.last_target_scores is not None else scores_raw_memory[0])
-        last_target_scores = scores_raw
 
         # Localize the target
         translation_vec, scale_ind, s, flag = self.localize_target(scores_raw, sample_pos, sample_scales)
         new_pos = sample_pos[scale_ind, :] + translation_vec
 
         # Get hard negative samples
-        negative_flag = scores_raw.max() > self.params.hard_negative_lb * scores_raw.max()
+        negative_flag = self.get_negative_sample(scores_raw_memory[1], scores_raw)
         if negative_flag:
             # Normalize the matrix
-            merged_unnorm = scores_raw.clone()
-            scores_raw = scores_raw * (1/scores_raw.max())
-            translation_vec_neg, scale_ind_neg, s_neg, flag_neg = self.localize_target(scores_raw.unsqueeze(0), sample_scales)
+            translation_vec_neg, scale_ind_neg, s_neg, flag_neg = self.localize_target(scores_raw, sample_pos, sample_scales)
             pos_negative = sample_pos[scale_ind_neg, :] + translation_vec_neg
 
         # Update position and scale
@@ -152,9 +162,9 @@ class DiMP(BaseTracker):
         hard_negative = (flag == 'hard_negative')
         learning_rate = self.params.get('hard_negative_learning_rate', None) if hard_negative else None
 
-        if update_flag and self.params.get('update_classifier', False):
+        if update_flag and self.params.get('update_classifier', False) and sigma >= self.params.lb_certainty_update:
             # Get train sample
-            train_x = test_x[scale_ind:scale_ind+1, ...]
+            train_x = test_x[scale_ind:scale_ind + 1, ...]
 
             # Create target_box and label for spatial sample
             target_box = self.get_iounet_box(self.pos, self.target_sz, sample_pos[scale_ind, :], sample_scales[scale_ind])
@@ -188,7 +198,7 @@ class DiMP(BaseTracker):
             show_tensor(score_map, 5, title='Max score = {:.2f}'.format(max_score))
 
         # Compute output bounding box
-        new_state = torch.cat((self.pos[[1, 0]] - (self.target_sz[[1, 0]]-1)/2, self.target_sz[[1, 0]]))
+        new_state = torch.cat((self.pos[[1, 0]] - (self.target_sz[[1, 0]] - 1) / 2, self.target_sz[[1, 0]]))
 
         if self.params.get('output_not_found_box', False) and flag == 'not_found':
             output_state = [-1, -1, -1, -1]
@@ -201,14 +211,14 @@ class DiMP(BaseTracker):
     def get_sample_location(self, sample_coord):
         """Get the location of the extracted sample."""
         sample_coord = sample_coord.float()
-        sample_pos = 0.5*(sample_coord[:, :2] + sample_coord[:, 2:] - 1)
+        sample_pos = 0.5 * (sample_coord[:, :2] + sample_coord[:, 2:] - 1)
         sample_scales = ((sample_coord[:, 2:] - sample_coord[:, :2]) / self.img_sample_sz).prod(dim=1).sqrt()
         return sample_pos, sample_scales
 
     def get_centered_sample_pos(self):
         """Get the center position for the new sample. Make sure the target is correctly centered."""
         return self.pos + ((self.feature_sz + self.kernel_size) % 2) * self.target_scale * \
-            self.img_support_sz / (2*self.feature_sz)
+            self.img_support_sz / (2 * self.feature_sz)
 
     def classify_target(self, sample_x: TensorList):
         """Classify target by applying the DiMP filter."""
@@ -238,14 +248,14 @@ class DiMP(BaseTracker):
         if score_filter_ksz > 1:
             assert score_filter_ksz % 2 == 1
             kernel = scores.new_ones(1, 1, score_filter_ksz, score_filter_ksz)
-            scores = F.conv2d(scores.view(-1, 1, *scores.shape[-2:]), kernel, padding=score_filter_ksz//2).view(scores.shape)
+            scores = F.conv2d(scores.view(-1, 1, *scores.shape[-2:]), kernel, padding=score_filter_ksz // 2).view(scores.shape)
 
         if self.params.get('advanced_localization', False):
             return self.localize_advanced(scores, sample_pos, sample_scales)
 
         # Get maximum
         score_sz = torch.Tensor(list(scores.shape[-2:]))
-        score_center = (score_sz - 1)/2
+        score_center = (score_sz - 1) / 2
         max_score, max_disp = dcf.max2d(scores)
         _, scale_ind = torch.max(max_score, dim=0)
         max_disp = max_disp[scale_ind, ...].float().cpu().view(-1)
@@ -263,7 +273,7 @@ class DiMP(BaseTracker):
         sz = scores.shape[-2:]
         score_sz = torch.Tensor(list(sz))
         output_sz = score_sz - (self.kernel_size + 1) % 2
-        score_center = (score_sz - 1)/2
+        score_center = (score_sz - 1) / 2
 
         scores_hn = scores
         if self.output_window is not None and self.params.get('perform_hn_without_windowing', False):
@@ -305,8 +315,8 @@ class DiMP(BaseTracker):
 
         # Handle the different cases
         if max_score2 > self.params.distractor_threshold * max_score1:
-            disp_norm1 = torch.sqrt(torch.sum((target_disp1-prev_target_vec)**2))
-            disp_norm2 = torch.sqrt(torch.sum((target_disp2-prev_target_vec)**2))
+            disp_norm1 = torch.sqrt(torch.sum((target_disp1 - prev_target_vec)**2))
+            disp_norm2 = torch.sqrt(torch.sum((target_disp2 - prev_target_vec)**2))
             disp_threshold = self.params.dispalcement_scale * math.sqrt(sz[0] * sz[1]) / 2
 
             if disp_norm2 > disp_threshold and disp_norm1 < disp_threshold:
@@ -397,7 +407,7 @@ class DiMP(BaseTracker):
         if 'shift' in augs:
             self.transforms.extend([augmentation.Translation(shift, aug_output_sz, global_shift.long().tolist()) for shift in augs['shift']])
         if 'relativeshift' in augs:
-            def get_absolute(shift): return (torch.Tensor(shift) * self.img_sample_sz/2).long().tolist()
+            def get_absolute(shift): return (torch.Tensor(shift) * self.img_sample_sz / 2).long().tolist()
             self.transforms.extend([augmentation.Translation(get_absolute(shift), aug_output_sz, global_shift.long().tolist()) for shift in augs['relativeshift']])
         if 'fliplr' in augs and augs['fliplr']:
             self.transforms.append(augmentation.FlipHorizontal(aug_output_sz, get_rand_shift()))
@@ -552,7 +562,7 @@ class DiMP(BaseTracker):
         # Add the dropout augmentation here, since it requires extraction of the classification features
         if 'dropout' in self.params.augmentation and self.params.get('use_augmentation', True):
             num, prob = self.params.augmentation['dropout']
-            self.transforms.extend(self.transforms[:1]*num)
+            self.transforms.extend(self.transforms[:1] * num)
             x = torch.cat([x, F.dropout2d(x[0:1, ...].expand(num, -1, -1, -1), p=prob, training=True)])
 
         # Set feature size and other related sizes
@@ -565,7 +575,7 @@ class DiMP(BaseTracker):
         self.output_window = None
         if self.params.get('window_output', False):
             if self.params.get('use_clipped_window', False):
-                self.output_window = dcf.hann2d_clipped(self.output_sz.long(), (self.output_sz*self.params.effective_search_area /
+                self.output_window = dcf.hann2d_clipped(self.output_sz.long(), (self.output_sz * self.params.effective_search_area /
                                                                                 self.params.search_area_scale).long(), centered=True).to(self.params.device)
             else:
                 self.output_window = dcf.hann2d(self.output_sz.long(), centered=True).to(self.params.device)
@@ -642,7 +652,7 @@ class DiMP(BaseTracker):
             # Run the filter optimizer module
             for i, (target_filter, memory) in enumerate(zip(self.target_filters, self.memories)):
                 # Get samples and bb from the memory
-                samples, target_boxes, sample_weights, sample_weights_neg = memory.get_diff_template_n
+                samples, target_boxes, sample_weights = memory.get_diff_template_n
 
                 # Save current filter if
                 samples = samples.clone().detach()
@@ -654,9 +664,9 @@ class DiMP(BaseTracker):
                                                                                             sample_weight=sample_weights,
                                                                                             compute_losses=plot_loss)
                 # If some temp templates has been discarted, it has to run again
-                diff = (new_target_filter-target_filter).abs()
+                diff = (new_target_filter - target_filter).abs()
                 res = memory.after_classifier(diff, samples)
-                samples, target_boxes, sample_weights, sample_weights_neg = memory.augmented_template_n
+                samples, target_boxes, sample_weights = memory.augmented_template_n
                 # If new samples are accepted, the new filter is stores
                 if res:
                     self.target_filters[i] = new_target_filter.detach()
@@ -681,7 +691,7 @@ class DiMP(BaseTracker):
 
         # Extract features from the relevant scale
         iou_features = self.get_iou_features(backbone_feat)
-        iou_features = TensorList([x[scale_ind:scale_ind+1, ...] for x in iou_features])
+        iou_features = TensorList([x[scale_ind:scale_ind + 1, ...] for x in iou_features])
 
         # Generate random initial boxes
         init_boxes = init_box.view(1, 4).clone()
@@ -689,11 +699,11 @@ class DiMP(BaseTracker):
             square_box_sz = init_box[2:].prod().sqrt()
             rand_factor = square_box_sz * torch.cat([self.params.box_jitter_pos * torch.ones(2), self.params.box_jitter_sz * torch.ones(2)])
 
-            minimal_edge_size = init_box[2:].min()/3
+            minimal_edge_size = init_box[2:].min() / 3
             rand_bb = (torch.rand(self.params.num_init_random_boxes, 4) - 0.5) * rand_factor
             new_sz = (init_box[2:] + rand_bb[:, 2:]).clamp(minimal_edge_size)
-            new_center = (init_box[:2] + init_box[2:]/2) + rand_bb[:, :2]
-            init_boxes = torch.cat([new_center - new_sz/2, new_sz], 1)
+            new_center = (init_box[:2] + init_box[2:] / 2) + rand_bb[:, :2]
+            init_boxes = torch.cat([new_center - new_sz / 2, new_sz], 1)
             init_boxes = torch.cat([init_box.view(1, 4), init_boxes])
 
         # Optimize the boxes
@@ -702,7 +712,7 @@ class DiMP(BaseTracker):
         # Remove weird boxes
         output_boxes[:, 2:].clamp_(1)
         aspect_ratio = output_boxes[:, 2] / output_boxes[:, 3]
-        keep_ind = (aspect_ratio < self.params.maximal_aspect_ratio) * (aspect_ratio > 1/self.params.maximal_aspect_ratio)
+        keep_ind = (aspect_ratio < self.params.maximal_aspect_ratio) * (aspect_ratio > 1 / self.params.maximal_aspect_ratio)
         output_boxes = output_boxes[keep_ind, :]
         output_iou = output_iou[keep_ind]
 
@@ -815,7 +825,7 @@ class DiMP(BaseTracker):
 
         # Extract features from the relevant scale
         iou_features = self.get_iou_features(backbone_feat)
-        iou_features = TensorList([x[scale_ind:scale_ind+1, ...] for x in iou_features])
+        iou_features = TensorList([x[scale_ind:scale_ind + 1, ...] for x in iou_features])
 
         # Generate random initial boxes
         init_boxes = init_box.view(1, 1, 4).clone().to(self.params.device)
@@ -855,8 +865,8 @@ class DiMP(BaseTracker):
         pos_step = 0.01
         sz_step = 0.01
 
-        pos_scale = torch.arange(-pos_dist, pos_dist+pos_step, step=pos_step)
-        sz_scale = torch.arange(-sz_dist, sz_dist+sz_step, step=sz_step)
+        pos_scale = torch.arange(-pos_dist, pos_dist + pos_step, step=pos_step)
+        sz_scale = torch.arange(-sz_dist, sz_dist + sz_step, step=sz_step)
 
         bbx = torch.zeros(1, pos_scale.numel(), 4)
         bbx[0, :, 0] = pos_scale.clone()

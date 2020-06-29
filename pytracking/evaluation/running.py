@@ -117,7 +117,7 @@ def run_sequence(seq: Sequence, tracker: Tracker, debug=False, visdom_info=None)
         _save_tracker_output(seq, tracker, output)
 
 
-def run_dataset(dataset, trackers, debug=False, threads=0, visdom_info=None):
+def run_dataset(dataset, trackers, debug=False, threads=0, visdom_info=None, step=1):
     """Runs a list of trackers on a dataset.
     args:
         dataset: List of Sequence instances, forming a dataset.
@@ -140,7 +140,7 @@ def run_dataset(dataset, trackers, debug=False, threads=0, visdom_info=None):
         mode = 'parallel'
 
     if mode == 'sequential':
-        for seq in dataset:
+        for seq in dataset[::step]:
             for tracker_info in trackers:
                 run_sequence(seq, tracker_info, debug=debug, visdom_info=visdom_info)
     elif mode == 'parallel':
