@@ -76,7 +76,7 @@ def run_search(tracker_name, tracker_param, run_id=None, dataset_name='otb', seq
                 c[k] = value
                 rec(c, i + 1)
     rec(override)
-    parallel_experiment(process_params, n=1)
+    parallel_experiment(process_params, n=3)
 
 
 def main():
