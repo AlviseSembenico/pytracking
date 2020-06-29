@@ -34,9 +34,9 @@ class Differential:
     def get_diff_template_n(self) -> Sequence[torch.Tensor]:
         if self.temp is not None:
             self.temp.requires_grad = True
-        templates, bb, w, w_neg = super().augmented_template_n
+        templates, bb, w = super().augmented_template_n
 
-        return templates, bb.detach(), w.detach(), w_neg
+        return templates, bb.detach(), w.detach()
 
     @property
     def get_diff_template(self) -> Sequence[torch.Tensor]:

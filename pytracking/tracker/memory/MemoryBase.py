@@ -17,7 +17,7 @@ class MemoryBase:
         self.templates = None
         self.bb = None
         self.weights = None
-        self.imgs = [None]*self.K if self.numpy_store else None
+        self.imgs = [None] * self.K if self.numpy_store else None
 
         self.temp = None
         self.temp_bb = None
@@ -80,10 +80,11 @@ class MemoryBase:
             # tmlt, bb, w = (torch.cat((tmlt, self.negative)),
             #                torch.cat((bb, self.negative_bb)),
             #                torch.cat((w, self.negative_w)))
-            tmlt, bb, = (torch.cat((tmlt, self.negative)),
-                         torch.cat((bb, self.negative_bb)))
+            tmlt, bb, w = (torch.cat((tmlt, self.negative)),
+                           torch.cat((bb, self.negative_bb)),
+                           torch.cat((w, self.negative_w)))
 
-        return tmlt, bb, w, self.negative_w
+        return tmlt, bb, w
 
     def add_temp(self, tmp: torch.Tensor, bb: torch.Tensor, w=1, img=None) -> None:
         bb = bb.to(self.device)
@@ -144,7 +145,7 @@ class MemoryBase:
                     self.imgs = torch.cat((self.imgs, imgs))
 
     def flush_temp(self):
-        self.temp, self.temp_bb, self.temp_w = [None]*3
+        self.temp, self.temp_bb, self.temp_w = [None] * 3
         self.temp_img = []
 
     def after_classifier(self, target_filter: torch.Tensor, templates: torch.Tensor) -> bool:
