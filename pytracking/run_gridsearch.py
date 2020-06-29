@@ -6,6 +6,7 @@ import argparse
 from copy import deepcopy
 import numpy as np
 import shutil
+from multiprocessing import Process
 
 env_path = os.path.join(os.path.dirname(__file__), '..')
 if env_path not in sys.path:
@@ -16,6 +17,8 @@ from pytracking.evaluation.running import run_dataset
 from pytracking.evaluation import get_dataset
 from pytracking.parameter.dimp.dimp50 import parameters
 from tracktest.lib import *
+from pytracking.grid import parallel_experiment
+
 
 vars = {
     'hard_negative_lb': np.linspace(0.4, 1, 4),
@@ -51,30 +54,21 @@ def run_search(tracker_name, tracker_param, run_id=None, dataset_name='otb', seq
     for k, v in vars.items():
         override[k] = v[0]
 
+    process_params = []
+
     def rec(override, i=-1):
+        # global process_params
         if i == len(vars.keys()) - 1:
             params = parameters()
             for kk, vv in override.items():
                 setattr(params, kk, vv)
-            print(override)
+
             trackers = [Tracker(tracker_name, tracker_param, run_id, parameters=params)]
 
-            run_dataset(dataset, trackers, debug, 0, visdom_info=visdom_info, step=3)
+            path = os.path.join(result_dir, str(uuid.uuid4()))
 
-            dimp_out = set(os.listdir(result_dir))
-            dimp_out = set(filter(lambda x: len(x.split('.')) > 1 and x.split('.')[1] == 'txt' and '_time' not in x, dimp_out))
-            dimp_acc, metrics_result = read_bb(dimp_out, OTB_100, result_dir)
-            dimp_acc = np.array(dimp_acc)
-            value = dimp_acc.mean(axis=0).sum()
-            path = os.path.join(result_dir, str(uuid.uuid4()) + "_" + "%.2f" % value)
-            os.mkdir(path)
-            for f in os.listdir(result_dir):
-                if f.endswith('txt'):
-                    print(f"Move {result_dir + f} to {path}")
-                    shutil.move(result_dir + f, path)
-            with open(path + '/detail.txt', 'w') as f:
-                for key in override.keys():
-                    f.write("%s,%s\n" % (key, override[key]))
+            process_params.append(Process(target=run_dataset, args=(dataset, trackers, debug, 0, visdom_info, 3, path)))
+
         else:
             k, v = list(vars.items())[i + 1]
             for value in v:
@@ -82,6 +76,7 @@ def run_search(tracker_name, tracker_param, run_id=None, dataset_name='otb', seq
                 c[k] = value
                 rec(c, i + 1)
     rec(override)
+    parallel_experiment(process_params, n=1)
 
 
 def main():

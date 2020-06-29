@@ -7,14 +7,20 @@ from collections import OrderedDict
 from pytracking.evaluation import Sequence, Tracker
 from ltr.data.image_loader import imwrite_indexed
 
+vars = {
+    'hard_negative_lb': np.linspace(0.4, 1, 4),
+    'ub_LT': np.linspace(5, 100, 5),
+    'lb_certainty_update': np.linspace(1, 100, 5)
+}
 
-def _save_tracker_output(seq: Sequence, tracker: Tracker, output: dict):
+
+def _save_tracker_output(seq: Sequence, tracker: Tracker, output: dict, folder=None):
     """Saves the output of the tracker."""
 
     if not os.path.exists(tracker.results_dir):
         os.makedirs(tracker.results_dir)
 
-    base_results_path = os.path.join(tracker.results_dir, seq.name)
+    base_results_path = os.path.join(folder, seq.name)
     segmentation_path = os.path.join(tracker.segmentation_dir, seq.name)
 
     frame_names = [os.path.splitext(os.path.basename(f))[0] for f in seq.frames]
@@ -36,6 +42,10 @@ def _save_tracker_output(seq: Sequence, tracker: Tracker, output: dict):
                 else:
                     data_dict[k] = [v, ]
         return data_dict
+
+    with open(folder + '/detail.txt', 'w') as f:
+        for key in vars.keys():
+            f.write("%s,%s\n" % (key, getattr(tracker.params, key)))
 
     for key, data in output.items():
         # If data is empty
@@ -73,7 +83,7 @@ def _save_tracker_output(seq: Sequence, tracker: Tracker, output: dict):
                 imwrite_indexed(os.path.join(segmentation_path, '{}.png'.format(frame_name)), frame_seg)
 
 
-def run_sequence(seq: Sequence, tracker: Tracker, debug=False, visdom_info=None):
+def run_sequence(seq: Sequence, tracker: Tracker, debug=False, visdom_info=None, folder=None):
     """Runs a tracker on a sequence."""
 
     def _results_exist():
@@ -114,10 +124,10 @@ def run_sequence(seq: Sequence, tracker: Tracker, debug=False, visdom_info=None)
     print('FPS: {}'.format(num_frames / exec_time))
 
     if not debug:
-        _save_tracker_output(seq, tracker, output)
+        _save_tracker_output(seq, tracker, output, folder)
 
 
-def run_dataset(dataset, trackers, debug=False, threads=0, visdom_info=None, step=1):
+def run_dataset(dataset, trackers, debug=False, threads=0, visdom_info=None, step=1, folder=None):
     """Runs a list of trackers on a dataset.
     args:
         dataset: List of Sequence instances, forming a dataset.
@@ -126,6 +136,7 @@ def run_dataset(dataset, trackers, debug=False, threads=0, visdom_info=None, ste
         threads: Number of threads to use (default 0).
         visdom_info: Dict containing information about the server for visdom
     """
+    os.mkdir(folder)
     multiprocessing.set_start_method('spawn', force=True)
 
     print('Evaluating {:4d} trackers on {:5d} sequences'.format(len(trackers), len(dataset)))
@@ -142,7 +153,7 @@ def run_dataset(dataset, trackers, debug=False, threads=0, visdom_info=None, ste
     if mode == 'sequential':
         for seq in dataset[::step]:
             for tracker_info in trackers:
-                run_sequence(seq, tracker_info, debug=debug, visdom_info=visdom_info)
+                run_sequence(seq, tracker_info, debug=debug, visdom_info=visdom_info, folder=folder)
     elif mode == 'parallel':
         param_list = [(seq, tracker_info, debug, visdom_info) for seq, tracker_info in product(dataset, trackers)]
         with multiprocessing.Pool(processes=threads) as pool:
