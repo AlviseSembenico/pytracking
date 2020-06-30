@@ -7,7 +7,7 @@ import numpy as np
 
 class MemoryBase:
 
-    def __init__(self, lenght, device='cuda', train=False, train_func=None, np_store=True, *args, **kwargs):
+    def __init__(self, lenght, device='cuda', train=False, train_func=None, np_store=True, decay=0.9, *args, **kwargs):
         # self.len_negative = 5
         self.K = lenght
         self.train = train
@@ -28,7 +28,7 @@ class MemoryBase:
         self.negative_bb = None
         self.negative_w = None
         self.device = torch.device(device)
-
+        self.decay = decay
         self.lr = 0.01
 
     def update(self, features: torch.Tensor, bb: torch.Tensor, weight):
@@ -45,6 +45,9 @@ class MemoryBase:
     @property
     def temp_set(self):
         return self.temp, self.temp_bb, self.temp_w
+
+    def cycle(self):
+        self.weights *= self.decay
 
     def send_to_device(self) -> None:
         tensors = [
@@ -151,11 +154,11 @@ class MemoryBase:
     def after_classifier(self, target_filter: torch.Tensor, templates: torch.Tensor) -> bool:
         pass
 
-    def append_negative(self, feat: torch.Tensor, bb: torch.Tensor, w: int = -1):
+    def append_negative(self, feat: torch.Tensor, bb: torch.Tensor, w: int = -0.2):
         bb = bb.to(self.device)
         if len(bb.shape) == 1:
             bb = bb.unsqueeze(0)
-        if isinstance(w, int):
+        if isinstance(w, float) or isinstance(w, int):
             w = torch.Tensor([w]).to(self.device)
         if self.negative is None:
             self.negative = feat

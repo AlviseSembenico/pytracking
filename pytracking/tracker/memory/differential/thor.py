@@ -48,8 +48,8 @@ class Differential:
 
 class LT_ModuleDiff(Differential, LT_Module):
 
-    def __init__(self, k, lb, ub, negative=None, * args, **kwargs):
-        super().__init__(k, lb, *args, **kwargs)
+    def __init__(self, k, lb, ub, decay, negative=None, *args, **kwargs):
+        super().__init__(k, lb, decay, *args, **kwargs)
         self._lb = lb
         self._ub = ub
         self.len_negative = negative
@@ -60,7 +60,7 @@ class LT_ModuleDiff(Differential, LT_Module):
 
 class ST_ModuleDiff(Differential, ST_Module):
 
-    def __init__(self, k, ub, negative=None, * args, **kwargs):
+    def __init__(self, k, ub, decay, negative=None, * args, **kwargs):
         super().__init__(k, *args, **kwargs)
         self._ub = ub
         self.len_negative = negative

@@ -79,8 +79,8 @@ class DiMP(BaseTracker):
         self.max_scale_factor = torch.min(self.image_sz / self.base_target_sz)
 
         # Initialize Thor modules
-        self.LT_Module = LT_ModuleDiff(self.params.LT_module, self.params.lb, self.params.ub_LT, self.params.hard_negative_size, alpha=self.params.tukey_alpha)
-        self.ST_Module = ST_ModuleDiff(self.params.ST_module, self.params.ub_ST, self.params.hard_negative_size)
+        self.LT_Module = LT_ModuleDiff(self.params.LT_module, self.params.lb, self.params.ub_LT, self.params.lt_decay, self.params.hard_negative_size, alpha=self.params.tukey_alpha)
+        self.ST_Module = ST_ModuleDiff(self.params.ST_module, self.params.ub_ST, self.params.st_decay, self.params.hard_negative_size)
         self.memories = [self.LT_Module, self.ST_Module]
         self.last_target_scores = None
         # Extract and transform sample
@@ -98,8 +98,8 @@ class DiMP(BaseTracker):
 
     def get_negative_sample(self, scores_short, merged):
         scores_short_c = scores_short.clone().squeeze()
-        first_max = scores_short.argmax()
-        dimension = scores_short.shape
+        first_max = scores_short_c.argmax()
+        dimension = scores_short_c.shape
         max_x, max_y = int(first_max / scores_short_c.shape[0]), (first_max % scores_short_c.shape[0]).item()
         max_x_offset, max_y_offset = ((max(0, max_x - self.params.hard_negative_offset_h),
                                        min(dimension[0], max_x + self.params.hard_negative_offset_h)),

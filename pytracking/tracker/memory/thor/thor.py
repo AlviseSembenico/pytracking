@@ -21,11 +21,11 @@ class TemplateBase(MemoryBase):
 
     def _pairwise_similarities_norm(self, templates: torch.Tensor, feat: torch.Tensor):
         res = F.conv2d(torch.cat((templates, feat)), feat).squeeze()
-        return res[:-1]/res[-1]
+        return res[:-1] / res[-1]
 
     def _compute_gram_matrix(self, templates: torch.Tensor) -> torch.Tensor:
         res = F.conv2d(templates, templates).squeeze()
-        norm = res/res.diag().unsqueeze(0)
+        norm = res / res.diag().unsqueeze(0)
         tri1 = norm.triu()
         tri2 = norm.T.triu()
         res = torch.stack([tri1, tri2])
@@ -36,8 +36,8 @@ class TemplateBase(MemoryBase):
 
 class LT_Module(TemplateBase):
 
-    def __init__(self, k, lb, train=False, train_func=None, alpha=0.450157, np_store=True, *args, **kwargs):
-        super().__init__(k, train=train, train_func=train_func, np_store=np_store, *args, **kwargs)
+    def __init__(self, k, lb, decay, train=False, train_func=None, alpha=0.450157, np_store=True, *args, **kwargs):
+        super().__init__(k, train=train, train_func=train_func, np_store=np_store, decay=decay, *args, **kwargs)
         self._lb = lb
         self.kernel_sz = 18
         self.alpha = alpha
@@ -52,7 +52,7 @@ class LT_Module(TemplateBase):
     def _throw_away_or_keep(self, feat: torch.Tensor, gram_matrix: torch.Tensor, similarity: torch.Tensor, self_similarity: torch.Tensor) -> bool:
 
         g_det = gram_matrix.det()
-        c = g_det**(-1/gram_matrix.shape[0])
+        c = g_det**(-1 / gram_matrix.shape[0])
         num_templates = gram_matrix.shape[0]
 
         dets = torch.zeros(num_templates)
@@ -61,21 +61,22 @@ class LT_Module(TemplateBase):
             gram[i, :] = similarity
             gram[:, i] = similarity
             gram[i, i] = self_similarity
-            dets[i] = (c*gram).det()
+            dets[i] = (c * gram).det()
         m_det, pos = dets.abs().max(0)
-        if m_det > (c*gram_matrix).det():
+        if m_det > (c * gram_matrix).det():
             return pos
         else:
             return -1
 
     def update(self, feat: torch.Tensor, bb: torch.Tensor, w: int = 1, imgs=None):
+        super().cycle()
         # feat = feat * self.window
         with torch.no_grad():
 
             # add it to the templates
             if self.templates.shape[0] < self.K:
                 self.push(feat, bb, w, imgs)
-                if len(self.templates) > self.offset_template+1:
+                if len(self.templates) > self.offset_template + 1:
                     self.gram_matrix = self._compute_gram_matrix(self.templates[self.offset_template:])
                 return
 
@@ -115,6 +116,7 @@ class ST_Module(TemplateBase):
         self.offset_template = 5
 
     def update(self, feat: torch.Tensor, bb: torch.Tensor, w: int = 1, imgs=None):
+        super().cycle()
         self.push(feat, bb, w, imgs=imgs)
         if self.num_templates > self.K:
             index = torch.ones(len(self.templates), device=self.templates.device)
@@ -126,7 +128,7 @@ class ST_Module(TemplateBase):
 
             if self.numpy_store:
                 if True not in [a is None for a in self.imgs]:
-                    self.imgs = [self.imgs[0]]+self.imgs[2:]
+                    self.imgs = [self.imgs[0]] + self.imgs[2:]
             elif len(self.imgs) > self.K:
                 ind = torch.ones(len(self.imgs)).bool()
                 ind[1] = False
