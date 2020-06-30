@@ -10,7 +10,7 @@ def parameters():
 
     params.use_gpu = True
 
-    params.image_sample_size = 18*16
+    params.image_sample_size = 18 * 16
     params.search_area_scale = 5
 
     # Learning parameters
@@ -37,7 +37,7 @@ def parameters():
                            'dropout': (2, 0.2)}
 
     params.augmentation_expansion_factor = 2
-    params.random_shift_factor = 1/3
+    params.random_shift_factor = 1 / 3
 
     # Advanced localization parameters
     params.advanced_localization = True
@@ -64,16 +64,19 @@ def parameters():
     # Memory parameters
     params.LT_module = 20
     params.ST_module = 15
+    params.ST_module = 15
     params.tukey_alpha = 0.450157
+    params.lt_decay = 0.9
+    params.st_decay = 0.9
     # TODO: fine tune this
-    params.lb_certainty_update = 0.5
-    params.hard_negative_lb = 2
+    params.lb_certainty_update = 1
+    params.hard_negative_lb = 10
     params.hard_negative_offset = 6
     params.hard_negative_size = 5
-    params.hard_negative_offset_h = int(params.hard_negative_offset/2)
+    params.hard_negative_offset_h = int(params.hard_negative_offset / 2)
     params.lb = 0.3
-    params.ub_LT = 6e5
-    params.ub_ST = 6e5
+    params.ub_LT = 76.25
+    params.ub_ST = 76.25
     params.lb_type = 'ensemble'
 
     params.net = NetWithBackbone(net_path='/hdd/projects/pytracking2/pytracking/checkpoints/ltr/dimp/dimp50/DiMPnet_ep0035.pth.tar',
