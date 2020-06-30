@@ -97,16 +97,18 @@ class DiMP(BaseTracker):
         return out
 
     def get_negative_sample(self, scores_short, merged):
-        scores_short = scores_short.clone().squeeze()
+        scores_short_c = scores_short.clone().squeeze()
         first_max = scores_short.argmax()
         dimension = scores_short.shape
-        max_x, max_y = int(first_max / scores_short.shape[0]), (first_max % scores_short.shape[0]).item()
+        max_x, max_y = int(first_max / scores_short_c.shape[0]), (first_max % scores_short_c.shape[0]).item()
         max_x_offset, max_y_offset = ((max(0, max_x - self.params.hard_negative_offset_h),
                                        min(dimension[0], max_x + self.params.hard_negative_offset_h)),
                                       (max(0, max_y - self.params.hard_negative_offset_h),
                                        min(dimension[1], max_y + self.params.hard_negative_offset_h)))
-        scores_short[max_x_offset[0]:max_x_offset[1], max_y_offset[0]:max_y_offset[1]] = 0
-        negative_flag = scores_short.max() > self.params.hard_negative_lb * merged.max()
+        scores_short_c[max_x_offset[0]:max_x_offset[1], max_y_offset[0]:max_y_offset[1]] = 0
+        negative_flag = scores_short_c.max() > self.params.hard_negative_lb * scores_short.max()
+        if negative_flag:
+            self.visdom.register(scores_short_c, 'heatmap', 1, 'test')
         return negative_flag
 
     def track(self, image, info: dict = None) -> dict:
@@ -173,9 +175,8 @@ class DiMP(BaseTracker):
             if negative_flag:
                 target_box_negative = self.get_iounet_box(self.pos, self.target_sz, sample_pos[scale_ind_neg, :], sample_scales[scale_ind_neg])
                 self.memories[1].append_negative(train_x, target_box_negative)
-
             # Update the classifier model
-            self.update_classifier(train_x, target_box, learning_rate, s[scale_ind, ...])
+            self.update_classifier(train_x, target_box, learning_rate, s[scale_ind, ...], negative_flag)
 
         # Set the pos of the tracker to iounet pos
         if self.params.get('use_iou_net', True) and flag != 'not_found' and hasattr(self, 'pos_iounet'):
@@ -621,7 +622,7 @@ class DiMP(BaseTracker):
         if self.params.get('filter_init_zero', False):
             self.net.classifier.filter_initializer = FilterInitializerZero(self.net.classifier.filter_size, feature_dim)
 
-    def update_classifier(self, train_x, target_box, learning_rate=None, scores=None):
+    def update_classifier(self, train_x, target_box, learning_rate=None, scores=None, negative=False):
         # Set flags and learning rate
         hard_negative_flag = learning_rate is not None
         if learning_rate is None:
@@ -640,6 +641,8 @@ class DiMP(BaseTracker):
             num_iter = self.params.get('net_opt_low_iter', None)
         elif (self.frame_num - 1) % self.params.train_skipping == 0:
             num_iter = self.params.get('net_opt_update_iter', None)
+        elif negative:
+            num_iter = 1
 
         plot_loss = self.params.debug > 0
 
