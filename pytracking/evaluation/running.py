@@ -19,8 +19,10 @@ def _save_tracker_output(seq: Sequence, tracker: Tracker, output: dict, folder=N
 
     if not os.path.exists(tracker.results_dir):
         os.makedirs(tracker.results_dir)
-
-    base_results_path = os.path.join(folder, seq.name)
+    if folder is not None:
+        base_results_path = os.path.join(folder, seq.name)
+    else:
+        base_results_path = os.path.join(tracker.results_dir, seq.name)
     segmentation_path = os.path.join(tracker.segmentation_dir, seq.name)
 
     frame_names = [os.path.splitext(os.path.basename(f))[0] for f in seq.frames]
@@ -42,10 +44,10 @@ def _save_tracker_output(seq: Sequence, tracker: Tracker, output: dict, folder=N
                 else:
                     data_dict[k] = [v, ]
         return data_dict
-
-    with open(folder + '/detail.txt', 'w') as f:
-        for key in vars.keys():
-            f.write("%s,%s\n" % (key, getattr(tracker.params, key)))
+    if folder is not None:
+        with open(folder + '/detail.txt', 'w') as f:
+            for key in vars.keys():
+                f.write("%s,%s\n" % (key, getattr(tracker.params, key)))
 
     for key, data in output.items():
         # If data is empty
@@ -136,7 +138,8 @@ def run_dataset(dataset, trackers, debug=False, threads=0, visdom_info=None, ste
         threads: Number of threads to use (default 0).
         visdom_info: Dict containing information about the server for visdom
     """
-    os.mkdir(folder)
+    if folder is not None:
+        os.mkdir(folder)
     multiprocessing.set_start_method('spawn', force=True)
 
     print('Evaluating {:4d} trackers on {:5d} sequences'.format(len(trackers), len(dataset)))
