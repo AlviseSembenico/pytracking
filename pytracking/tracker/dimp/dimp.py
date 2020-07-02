@@ -83,6 +83,7 @@ class DiMP(BaseTracker):
         self.ST_Module = ST_ModuleDiff(self.params.ST_module, self.params.ub_ST, self.params.st_decay, self.params.hard_negative_size)
         self.memories = [self.LT_Module, self.ST_Module]
         self.last_target_scores = None
+        self.hidden = None
         # Extract and transform sample
         init_backbone_feat = self.generate_init_samples(im)
 
@@ -134,9 +135,11 @@ class DiMP(BaseTracker):
 
         # Compute classification scores
         scores_raw_memory = self.classify_target(test_x)
-        scores_raw, sigma = self.net.scores_merger.predict(torch.stack(scores_raw_memory),
-                                                           self.last_target_scores if self.last_target_scores is not None else scores_raw_memory[0])
-
+        scores_raw, sigma, hidden = self.net.scores_merger.predict(torch.stack(scores_raw_memory),
+                                                                   self.last_target_scores if self.last_target_scores is not None else scores_raw_memory[0],
+                                                                   hidden=self.hidden)
+        self.last_target_scores = scores_raw
+        self.hidden = hidden
         # Localize the target
         translation_vec, scale_ind, s, flag = self.localize_target(scores_raw, sample_pos, sample_scales)
         new_pos = sample_pos[scale_ind, :] + translation_vec

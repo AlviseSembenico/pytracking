@@ -10,9 +10,9 @@ class MergerScoreLSTMFeat(nn.Module):
     def __init__(self, dim=19, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Settings
-        self.hidden_dim_lstm = 19*19
+        self.hidden_dim_lstm = 19 * 19
         self.hidden_layers_lstm = 2
-        self.dim_lstm = 19*19
+        self.dim_lstm = 19 * 19
 
         self.sqr_dim = dim
         dim = dim**2
@@ -21,7 +21,7 @@ class MergerScoreLSTMFeat(nn.Module):
         self.lstm = nn.LSTM(self.dim_lstm, self.hidden_dim_lstm, self.hidden_layers_lstm, batch_first=True)
 
         self.linear = nn.Sequential(
-            nn.Linear(dim*3, 1024),
+            nn.Linear(dim * 3, 1024),
             nn.ReLU(),
             nn.Linear(1024, 1024),
             nn.Dropout(),
@@ -32,7 +32,7 @@ class MergerScoreLSTMFeat(nn.Module):
             nn.Linear(1024, 512),
             nn.Dropout(),
             nn.ReLU(),
-            nn.Linear(512, dim+1),
+            nn.Linear(512, dim + 1),
         )
         self.hidden = None
         self.disable_linear = False
@@ -40,13 +40,16 @@ class MergerScoreLSTMFeat(nn.Module):
 
     def predict(self, x, temporal, hidden=None):
         # Encoding
+        if hidden is None:
+            hidden = self.hidden
         pred, hidden = self.lstm(temporal.view(-1, 1, self.dim), hidden)
+        self.hidden = hidden
 
         x.clamp_(0, 1)
 
         out = self.linear(torch.cat((x.view(2, 1, self.dim), pred), axis=0).view(1, -1))
-        out, sigma = out[:, :-1], nn.functional.relu(out[:, -1]+1)+1
-        return out.view(1, 1, self.sqr_dim, self.sqr_dim), sigma
+        out, sigma = out[:, :-1], nn.functional.relu(out[:, -1] + 1) + 1
+        return out.view(1, 1, self.sqr_dim, self.sqr_dim), sigma, hidden
 
     def forward(self, x, temporal, hidden=None, visdom=None):
         # Encoding
@@ -59,7 +62,7 @@ class MergerScoreLSTMFeat(nn.Module):
         values = torch.cat((x, pred), axis=0).permute(1, 2, 0, 3, 4)
 
         out = self.linear(values.flatten(2).flatten(end_dim=1))
-        out, sigma = out[:, :-1], nn.functional.relu(out[:, -1]+1)+1
+        out, sigma = out[:, :-1], nn.functional.relu(out[:, -1] + 1) + 1
         return out, sigma, pred, hidden
 
 
