@@ -1,6 +1,7 @@
 import os
 import sys
 import argparse
+import uuid
 
 env_path = os.path.join(os.path.dirname(__file__), '..')
 if env_path not in sys.path:
@@ -10,9 +11,11 @@ from pytracking.evaluation import get_dataset
 from pytracking.evaluation.running import run_dataset
 from pytracking.evaluation import Tracker
 
+result_dir = '/hdd/projects/pytracking2/pytracking/pytracking/tracking_results/dimp/dimp50/'
+
 
 def run_tracker(tracker_name, tracker_param, run_id=None, dataset_name='otb', sequence=None, debug=0, threads=0,
-                visdom_info=None):
+                visdom_info=None, folder=None):
     """Run tracker on sequence or dataset.
     args:
         tracker_name: Name of tracking method.
@@ -24,6 +27,8 @@ def run_tracker(tracker_name, tracker_param, run_id=None, dataset_name='otb', se
         threads: Number of threads.
         visdom_info: Dict optionally containing 'use_visdom', 'server' and 'port' for Visdom visualization.
     """
+    if folder is not None:
+        folder = os.path.join(result_dir, folder)
 
     visdom_info = {} if visdom_info is None else visdom_info
 
@@ -31,10 +36,9 @@ def run_tracker(tracker_name, tracker_param, run_id=None, dataset_name='otb', se
 
     if sequence is not None:
         dataset = [dataset[sequence]]
-
     trackers = [Tracker(tracker_name, tracker_param, run_id)]
 
-    run_dataset(dataset, trackers, debug, threads, visdom_info=visdom_info)
+    run_dataset(dataset, trackers, debug, threads, visdom_info=visdom_info, folder=folder)
 
 
 def main():
@@ -49,6 +53,7 @@ def main():
     parser.add_argument('--use_visdom', type=bool, default=True, help='Flag to enable visdom.')
     parser.add_argument('--visdom_server', type=str, default='127.0.0.1', help='Server for visdom.')
     parser.add_argument('--visdom_port', type=int, default=8097, help='Port for visdom.')
+    parser.add_argument('--folder', type=str, default=None, help='Folder for saving the results.')
 
     args = parser.parse_args()
 
@@ -58,7 +63,7 @@ def main():
         seq_name = args.sequence
 
     run_tracker(args.tracker_name, args.tracker_param, args.runid, args.dataset_name, seq_name, args.debug,
-                args.threads, {'use_visdom': args.use_visdom, 'server': args.visdom_server, 'port': args.visdom_port})
+                args.threads, {'use_visdom': args.use_visdom, 'server': args.visdom_server, 'port': args.visdom_port}, folder=args.folder)
 
 
 if __name__ == '__main__':

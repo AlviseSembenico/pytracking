@@ -18,21 +18,21 @@ def visdom_ui_handler(self, data):
 
 
 try:
-    visdom = Visdom(3, {'win_id':  'Tracking', 'handler': visdom_ui_handler}, visdom_info={})
+    visdom = Visdom(3, {'win_id': 'Tracking', 'handler': visdom_ui_handler}, visdom_info={})
 except:
     visdom = None
 
 
 def run(settings):
     settings.description = 'Default train settings for DiMP with ResNet50 as backbone.'
-    settings.batch_size = 5
+    settings.batch_size = 8
     settings.num_workers = 8
     settings.multi_gpu = False
     settings.print_interval = 1
     settings.normalize_mean = [0.485, 0.456, 0.406]
     settings.normalize_std = [0.229, 0.224, 0.225]
     settings.search_area_factor = 5.0
-    settings.output_sigma_factor = 1/4
+    settings.output_sigma_factor = 1 / 4
     settings.target_filter_sz = 4
     settings.feature_sz = 18
     settings.output_sz = settings.feature_sz * 16
@@ -120,7 +120,7 @@ def run(settings):
         'test_clf': ltr_losses.LBHinge(threshold=settings.hinge_threshold),
         'test_clf_merger': ltr_losses.LBHinge(threshold=settings.hinge_threshold, error_metric=nn.MSELoss(reduction='none'))}
 
-    loss_weight = {'iou': 1, 'test_clf': 100, 'test_init_clf': 100, 'test_iter_clf': 400, 'merger': 1000}
+    loss_weight = {'iou': 1, 'test_clf': 100, 'test_init_clf': 100, 'test_iter_clf': 400, 'merger': 2000}
 
     actor = actors.DiMPActor(net=net, objective=objective, loss_weight=loss_weight, visdom=visdom)
 
@@ -130,17 +130,23 @@ def run(settings):
     ],
         lr=2e-8)
     future = {
-        6: ([
-            {'params': actor.net.classifier.filter_initializer.parameters(), 'lr': 5e-8},
-            {'params': actor.net.classifier.filter_optimizer.parameters(), 'lr': 5e-7},
-            {'params': actor.net.classifier.feature_extractor.parameters(), 'lr': 5e-8},
-            {'params': actor.net.feature_extractor.parameters(), 'lr': 2e-8},
-            {'params': actor.net.bb_regressor.parameters(), 'lr': 2e-7},
-        ], [])
+        10: ([{'params': actor.net.classifier.filter_initializer.parameters(), 'lr': 5e-5},
+              {'params': actor.net.classifier.filter_optimizer.parameters(), 'lr': 5e-4},
+              {'params': actor.net.classifier.feature_extractor.parameters(), 'lr': 5e-5},
+              #   {'params': actor.net.bb_regressor.parameters()},
+              {'params': actor.net.feature_extractor.parameters(), 'lr': 2e-5}], [])
     }
 
     lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=15, gamma=0.2)
 
-    trainer = LTRTrainer(actor, [loader_train, loader_val], optimizer, settings, lr_scheduler, future=future)
+    trainer = LTRTrainer(
+        actor,
+        [loader_train, loader_val],
+        optimizer,
+        settings,
+        lr_scheduler,
+        future=future,
+        future_loaders={2: loader_train2}
+    )
 
     trainer.train(50, load_latest=True, fail_safe=False)

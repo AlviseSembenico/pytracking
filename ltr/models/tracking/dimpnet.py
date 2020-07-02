@@ -49,7 +49,7 @@ class DiMPnet(nn.Module):
 
         assert train_imgs.dim() == 5 and test_imgs.dim() == 5, 'Expect 5 dimensional inputs'
 
-        if epoch < 6:
+        if epoch < 10:
             with torch.no_grad():
                 # Extract backbone features
                 train_feat = self.extract_backbone_features(train_imgs.reshape(-1, *train_imgs.shape[-3:]))
@@ -77,7 +77,7 @@ class DiMPnet(nn.Module):
         merged = self.merge_scores(target_scores[0][-1], target_scores[1][-1], past_target_scores, visdom=visdom)
 
         # Get bb_regressor features
-        if epoch >= 6 or True:
+        if epoch >= 10:
             train_feat_iou = self.get_backbone_bbreg_feat(train_feat)
             test_feat_iou = self.get_backbone_bbreg_feat(test_feat)
 
@@ -234,7 +234,7 @@ def dimpnet50(filter_size=1, optim_iter=5, optim_init_step=1.0, optim_init_reg=0
                                          filter_optimizer=optimizer, feature_extractor=clf_feature_extractor)
 
     # Bounding box regressor
-    bb_regressor = bbmodels.AtomIoUNet(input_dim=(4*128, 4*256), pred_input_dim=iou_input_dim, pred_inter_dim=iou_inter_dim)
+    bb_regressor = bbmodels.AtomIoUNet(input_dim=(4 * 128, 4 * 256), pred_input_dim=iou_input_dim, pred_inter_dim=iou_inter_dim)
 
     scores_merger = getMergeScore(
         net_path=None,
@@ -384,7 +384,7 @@ def klcedimpnet50(filter_size=1, optim_iter=5, optim_init_step=1.0, optim_init_r
                                          filter_optimizer=optimizer, feature_extractor=clf_feature_extractor)
 
     # Bounding box regressor
-    bb_regressor = bbmodels.AtomIoUNet(input_dim=(4*128, 4*256), pred_input_dim=iou_input_dim, pred_inter_dim=iou_inter_dim)
+    bb_regressor = bbmodels.AtomIoUNet(input_dim=(4 * 128, 4 * 256), pred_input_dim=iou_input_dim, pred_inter_dim=iou_inter_dim)
 
     # DiMP network
     net = DiMPnet(feature_extractor=backbone_net, classifier=classifier, bb_regressor=bb_regressor,

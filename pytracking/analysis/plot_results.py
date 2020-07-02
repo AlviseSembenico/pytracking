@@ -96,7 +96,7 @@ def get_tracker_display_name(tracker):
     else:
         disp_name = tracker['disp_name']
 
-    return  disp_name
+    return disp_name
 
 
 def plot_draw_save(y, x, scores, trackers, plot_draw_styles, result_plot_path, plot_opts):
@@ -135,7 +135,8 @@ def plot_draw_save(y, x, scores, trackers, plot_draw_styles, result_plot_path, p
                        linestyle=plot_draw_styles[index_sort.numel() - id - 1]['line_style'])
 
         plotted_lines.append(line[0])
-
+        # import ipdb
+        # ipdb.set_trace()
         tracker = trackers[id_sort]
         disp_name = get_tracker_display_name(tracker)
 
@@ -164,7 +165,8 @@ def check_and_load_precomputed_results(trackers, dataset, report_name, force_eva
     # Load pre-computed results
     result_plot_path = os.path.join(settings.result_plot_path, report_name)
     eval_data_path = os.path.join(result_plot_path, 'eval_data.pkl')
-
+    # import ipdb
+    # ipdb.set_trace()
     if os.path.isfile(eval_data_path) and not force_evaluation:
         with open(eval_data_path, 'rb') as fh:
             eval_data = pickle.load(fh)
@@ -179,6 +181,8 @@ def check_and_load_precomputed_results(trackers, dataset, report_name, force_eva
         # Update display names
         tracker_names = [{'name': t.name, 'param': t.parameter_name, 'run_id': t.run_id, 'disp_name': t.display_name}
                          for t in trackers]
+        # import ipdb
+        # ipdb.set_trace()
         eval_data['trackers'] = tracker_names
 
     return eval_data
@@ -225,8 +229,9 @@ def plot_results(trackers, dataset, report_name, merge_results=False,
     # Merge results from multiple runs
     if merge_results:
         eval_data = merge_multiple_runs(eval_data)
-
     tracker_names = eval_data['trackers']
+    # import ipdb
+    # ipdb.set_trace()
 
     valid_sequence = torch.tensor(eval_data['valid_sequence'], dtype=torch.bool)
 
@@ -235,6 +240,8 @@ def plot_results(trackers, dataset, report_name, merge_results=False,
     print('\nGenerating plots for: {}'.format(report_name))
 
     # ********************************  Success Plot **************************************
+    # import ipdb
+    # ipdb.set_trace()
     if 'success' in plot_types:
         ave_success_rate_plot_overlap = torch.tensor(eval_data['ave_success_rate_plot_overlap'])
 
@@ -244,6 +251,8 @@ def plot_results(trackers, dataset, report_name, merge_results=False,
 
         success_plot_opts = {'plot_type': 'success', 'legend_loc': 'lower left', 'xlabel': 'Overlap threshold',
                              'ylabel': 'Overlap Precision [%]', 'xlim': (0, 1.0), 'ylim': (0, 100), 'title': 'Success plot'}
+        # import ipdb
+        # ipdb.set_trace()
         plot_draw_save(auc_curve, threshold_set_overlap, auc, tracker_names, plot_draw_styles, result_plot_path, success_plot_opts)
 
     # ********************************  Precision Plot **************************************
