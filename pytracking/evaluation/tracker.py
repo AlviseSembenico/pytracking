@@ -21,7 +21,7 @@ _tracker_disp_colors = {1: (0, 255, 0), 2: (0, 0, 255), 3: (255, 0, 0),
                         7: (123, 123, 123), 8: (255, 128, 0), 9: (128, 0, 255)}
 
 
-def trackerlist(name: str, parameter_name: str, run_ids = None, display_name: str = None):
+def trackerlist(name: str, parameter_name: str, run_ids=None, display_name: str = None):
     """Generate list of trackers.
     args:
         name: Name of tracking method.
@@ -43,7 +43,7 @@ class Tracker:
         display_name: Name to be displayed in the result plots.
     """
 
-    def __init__(self, name: str, parameter_name: str, run_id: int = None, display_name: str = None):
+    def __init__(self, name: str, parameter_name: str, run_id: int = None, display_name: str = None, parameters=None):
         assert run_id is None or isinstance(run_id, int)
 
         self.name = name
@@ -66,8 +66,8 @@ class Tracker:
         else:
             self.tracker_class = None
 
+        self.params = parameters if parameters is not None else self.get_parameters()
         self.visdom = None
-
 
     def _init_visdom(self, visdom_info, debug):
         visdom_info = {} if visdom_info is None else visdom_info
@@ -96,7 +96,6 @@ class Tracker:
 
             elif data['key'] == 'ArrowRight' and self.pause_mode:
                 self.step = True
-
 
     def create_tracker(self, params):
         tracker = self.tracker_class(params)
@@ -576,7 +575,6 @@ class Tracker:
             elif tracker.params.visualization:
                 self.visualize(image, out['target_bbox'], segmentation)
 
-
     def run_vot(self, debug=None, visdom_info=None):
         params = self.get_parameters()
         params.tracker_name = self.name
@@ -653,13 +651,11 @@ class Tracker:
         params = param_module.parameters()
         return params
 
-
     def init_visualization(self):
         self.pause_mode = False
         self.fig, self.ax = plt.subplots(1)
         self.fig.canvas.mpl_connect('key_press_event', self.press)
         plt.tight_layout()
-
 
     def visualize(self, image, state, segmentation=None):
         self.ax.cla()
@@ -705,6 +701,3 @@ class Tracker:
     def _read_image(self, image_file: str):
         im = cv.imread(image_file)
         return cv.cvtColor(im, cv.COLOR_BGR2RGB)
-
-
-
