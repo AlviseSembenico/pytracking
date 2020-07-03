@@ -1,6 +1,7 @@
 from pytracking.utils import TrackerParams
 from pytracking.features.net_wrappers import NetWithBackbone
 
+
 def parameters():
     params = TrackerParams()
 
@@ -9,7 +10,7 @@ def parameters():
 
     params.use_gpu = True
 
-    params.image_sample_size = 18*16
+    params.image_sample_size = 18 * 16
     params.search_area_scale = 5
 
     # Learning parameters
@@ -31,12 +32,12 @@ def parameters():
     params.use_augmentation = True
     params.augmentation = {'fliplr': True,
                            'rotate': [10, -10, 45, -45],
-                           'blur': [(3,1), (1, 3), (2, 2)],
-                           'relativeshift': [(0.6, 0.6), (-0.6, 0.6), (0.6, -0.6), (-0.6,-0.6)],
+                           'blur': [(3, 1), (1, 3), (2, 2)],
+                           'relativeshift': [(0.6, 0.6), (-0.6, 0.6), (0.6, -0.6), (-0.6, -0.6)],
                            'dropout': (2, 0.2)}
 
     params.augmentation_expansion_factor = 2
-    params.random_shift_factor = 1/3
+    params.random_shift_factor = 1 / 3
 
     # Advanced localization parameters
     params.advanced_localization = True
@@ -59,6 +60,8 @@ def parameters():
     params.box_refinement_iter = 5
     params.box_refinement_step_length = 1
     params.box_refinement_step_decay = 1
+
+    params.grad_lb = 76
 
     params.net = NetWithBackbone(net_path='dimp50.pth',
                                  use_gpu=params.use_gpu)
