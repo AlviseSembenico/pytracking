@@ -138,8 +138,8 @@ def run_dataset(dataset, trackers, debug=False, threads=0, visdom_info=None, ste
         threads: Number of threads to use (default 0).
         visdom_info: Dict containing information about the server for visdom
     """
-    # if folder is not None:
-    #     os.mkdir(folder)
+    if folder is not None and not os.path.isdir(folder):
+        os.mkdir(folder)
     multiprocessing.set_start_method('spawn', force=True)
 
     print('Evaluating {:4d} trackers on {:5d} sequences'.format(len(trackers), len(dataset)))
