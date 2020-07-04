@@ -75,11 +75,12 @@ def parameters():
     params.hard_negative_size = 5
     params.hard_negative_offset_h = int(params.hard_negative_offset / 2)
     params.lb = 0.3
-    params.ub_LT = 76.25
-    params.ub_ST = 76.25
+    params.ub_LT = 1e10
+    params.ub_ST = 1e10
     params.lb_type = 'ensemble'
+    params.sigma_short = 2
 
-    params.net = NetWithBackbone(net_path='/hdd/projects/pytracking2/pytracking/checkpoints/ltr/dimp/dimp50/DiMPnet_ep0035.pth.tar',
+    params.net = NetWithBackbone(net_path='/hdd/projects/pytracking2/pytracking/checkpoints/ltr/dimp/dimp50/DiMPnet_ep0047.pth.tar',
                                  use_gpu=params.use_gpu)
     # params.net = NetWithBackbone(net_path='dimp50.pth',
     #                              use_gpu=params.use_gpu)

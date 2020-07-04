@@ -138,6 +138,8 @@ class DiMP(BaseTracker):
         scores_raw, sigma, hidden = self.net.scores_merger.predict(torch.stack(scores_raw_memory),
                                                                    self.last_target_scores if self.last_target_scores is not None else scores_raw_memory[0],
                                                                    hidden=self.hidden)
+        if sigma >= self.params.sigma_short:
+            scores_raw = scores_raw_memory[1]
         self.last_target_scores = scores_raw
         self.hidden = hidden
         # Localize the target
