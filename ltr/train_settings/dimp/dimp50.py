@@ -25,7 +25,7 @@ except:
 
 def run(settings):
     settings.description = 'Default train settings for DiMP with ResNet50 as backbone.'
-    settings.batch_size = 8
+    settings.batch_size = 5
     settings.num_workers = 8
     settings.multi_gpu = False
     settings.print_interval = 1
@@ -44,7 +44,7 @@ def run(settings):
     # Train datasets
     lasot_train = Lasot(settings.env.lasot_dir, split='train')
     got10k_train = Got10k(settings.env.got10k_dir, split='vottrain')
-    trackingnet_train = TrackingNet(settings.env.trackingnet_dir, set_ids=list(range(4)))
+    trackingnet_train = TrackingNet(settings.env.trackingnet_dir, set_ids=list(range(6)))
     # coco_train = MSCOCOSeq(settings.env.coco_dir)
 
     # Validation datasets
@@ -92,9 +92,6 @@ def run(settings):
     loader_train = LTRLoader('train', dataset_train, training=True, batch_size=settings.batch_size, num_workers=settings.num_workers,
                              shuffle=True, drop_last=True, stack_dim=1)
 
-    loader_train2 = LTRLoader('train', dataset_train, training=True, batch_size=5, num_workers=settings.num_workers,
-                              shuffle=True, drop_last=True, stack_dim=1)
-
     # Validation samplers and loaders
     dataset_val = sampler.DiMPSampler([got10k_val], [1], samples_per_epoch=5000, max_gap=30,
                                       num_test_frames=3, num_train_frames=3, frame_sample_mode='memory',
@@ -126,27 +123,25 @@ def run(settings):
 
     # Optimizer
     optimizer = optim.Adam([
-        {'params': actor.net.scores_merger.parameters(), 'lr': 2e-4}
+        {'params': actor.net.scores_merger.parameters()},
+        {'params': actor.net.classifier.filter_initializer.parameters(), 'lr': 5e-5},
+        {'params': actor.net.classifier.filter_optimizer.parameters(), 'lr': 5e-4},
+        {'params': actor.net.classifier.feature_extractor.parameters(), 'lr': 5e-5},
+        {'params': actor.net.bb_regressor.parameters()},
+        {'params': actor.net.feature_extractor.parameters(), 'lr': 2e-5}
     ],
-        lr=2e-8)
-    future = {
-        10: ([{'params': actor.net.classifier.filter_initializer.parameters(), 'lr': 5e-5},
-              {'params': actor.net.classifier.filter_optimizer.parameters(), 'lr': 5e-4},
-              {'params': actor.net.classifier.feature_extractor.parameters(), 'lr': 5e-5},
-              #   {'params': actor.net.bb_regressor.parameters()},
-              {'params': actor.net.feature_extractor.parameters(), 'lr': 2e-5}], [])
-    }
+        lr=2e-4)
 
     lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=15, gamma=0.2)
 
     trainer = LTRTrainer(
         actor,
-        [loader_train, loader_val],
+        [loader_train],
         optimizer,
         settings,
         lr_scheduler,
-        future=future,
-        future_loaders={2: loader_train2}
+        future={},
+        future_loaders={}
     )
 
     trainer.train(50, load_latest=True, fail_safe=False)

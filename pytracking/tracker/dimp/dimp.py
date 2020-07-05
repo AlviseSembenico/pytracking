@@ -108,8 +108,8 @@ class DiMP(BaseTracker):
                                        min(dimension[1], max_y + self.params.hard_negative_offset_h)))
         scores_short_c[max_x_offset[0]:max_x_offset[1], max_y_offset[0]:max_y_offset[1]] = 0
         negative_flag = scores_short_c.max() > self.params.hard_negative_lb * scores_short.max()
-        if negative_flag:
-            self.visdom.register(scores_short_c, 'heatmap', 1, 'test')
+        # if negative_flag:
+        #     self.visdom.register(scores_short_c, 'heatmap', 1, 'test')
         return negative_flag
 
     def track(self, image, info: dict = None) -> dict:

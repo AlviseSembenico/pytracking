@@ -78,6 +78,7 @@ class LTRTrainer(BaseTrainer):
             self.num_iter += 1
 
     def future_step(self):
+        return
         for e in sorted(self.future.keys()):
             if self.epoch >= e:
                 print(f'adding optimizer from epoch {self.epoch}')

@@ -3,7 +3,7 @@ from .base_image_dataset import BaseImageDataset
 from ltr.data.image_loader import jpeg4py_loader_w_failsafe
 import torch
 import random
-import lvis.lvis as lvis_pk
+# import lvis.lvis as lvis_pk
 from collections import OrderedDict
 from ltr.admin.environment import env_settings
 

@@ -90,7 +90,8 @@ def run_sequence(seq: Sequence, tracker: Tracker, debug=False, visdom_info=None,
 
     def _results_exist():
         if seq.object_ids is None:
-            bbox_file = '{}/{}.txt'.format(tracker.results_dir, seq.name)
+            t = folder if folder is not None else tracker.results_dir
+            bbox_file = '{}/{}.txt'.format(t, seq.name)
             return os.path.isfile(bbox_file)
         else:
             bbox_files = ['{}/{}_{}.txt'.format(tracker.results_dir, seq.name, obj_id) for obj_id in seq.object_ids]
